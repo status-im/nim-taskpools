@@ -35,7 +35,8 @@ proc newFlowVar*(T: typedesc): Flowvar[T] {.inline.} =
   result.chan = cast[ptr ChannelSPSCSingle](c_calloc(1, csize_t size))
   result.chan[].initialize(sizeof(T))
 
-proc cleanup(fv: sink Flowvar) {.inline.} =
+proc cleanup(fv: Flowvar) {.inline.} =
+  # TODO: Nim v1.4+ can use "sink Flowvar"
   if not fv.chan.isNil:
     c_free(fv.chan)
 

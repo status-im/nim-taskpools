@@ -33,3 +33,12 @@ In particular compared to [Weave](https://github.com/mratsim/weave), here are th
 - Weave can handle trillions of small tasks that require only 10µs per task. (Load Balancing overhead)
 - Weave maintains an adaptive memory pool to reduce memory allocation overhead,
   Taskpools allocations are as-needed. (Scheduler overhead)
+
+## License
+
+Licensed and distributed under either of
+
+* MIT license: [LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT
+* Apache License, Version 2.0, ([LICENSE-APACHEv2](LICENSE-APACHEv2) or http://www.apache.org/licenses/LICENSE-2.0)
+
+at your option. This file may not be copied, modified, or distributed except according to those terms.
