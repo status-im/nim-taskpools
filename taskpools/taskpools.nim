@@ -527,4 +527,4 @@ macro spawn*(tp: TaskPool, fnCall: typed): untyped =
 
   # Wrap in a block for namespacing
   result = nnkBlockStmt.newTree(newEmptyNode(), result)
-  echo result.toStrLit()
+  # echo result.toStrLit()
