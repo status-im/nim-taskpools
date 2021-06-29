@@ -101,7 +101,7 @@ type
     eventNotifier: EventNotifier
       ## Puts thread to sleep
 
-    numThreads{.align: 64.}: int
+    numThreads*{.align: 64.}: int
     workerDeques: ptr UncheckedArray[ChaseLevDeque[TaskNode]]
       ## Direct access for task stealing
     workers: ptr UncheckedArray[Thread[(Taskpool, WorkerID)]]
