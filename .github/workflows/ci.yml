@@ -1,4 +1,4 @@
-name: Constantine CI
+name: Taskpools CI
 on: [push, pull_request]
 
 jobs:
