@@ -34,7 +34,6 @@ task test, "Run Taskpools tests":
   test "", "examples/e01_simple_tasks.nim"
 
   # Benchmarks
-  test "", "benchmarks/dfs/taskpool_dfs.nim"
   test "", "benchmarks/heat/taskpool_heat.nim"
   test "", "benchmarks/nqueens/taskpool_nqueens.nim"
 
