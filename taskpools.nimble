@@ -42,5 +42,8 @@ task test, "Run Taskpools tests":
     test "", "benchmarks/single_task_producer/taskpool_spc.nim"
     test "", "benchmarks/bouncing_producer_consumer/taskpool_bpc.nim"
 
+    # TODO - unsure why this fails on windows
+    test "", "benchmarks/dfs/taskpool_dfs.nim"
+
   # TODO - generics in macro issue
   # test "", "benchmarks/matmul_cache_oblivious/taskpool_matmul_co.nim"
