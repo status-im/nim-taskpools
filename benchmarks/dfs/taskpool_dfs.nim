@@ -8,11 +8,14 @@
 import
   # Stdlib
   system/ansi_c, strformat, os, strutils, cpuinfo,
-  # Weave
-  ../../weave
+  # Library
+  ../../taskpools
+  
 when not defined(windows):
   # bench
   import ../wtime
+
+var tp: Taskpool
 
 proc dfs(depth, breadth: int): uint32 =
   if depth == 0:
@@ -22,13 +25,13 @@ proc dfs(depth, breadth: int): uint32 =
   var sums = newSeq[Flowvar[uint32]](breadth)
 
   for i in 0 ..< breadth:
-    sums[i] = spawn dfs(depth - 1, breadth)
+    sums[i] = tp.spawn dfs(depth - 1, breadth)
 
   for i in 0 ..< breadth:
     result += sync(sums[i])
 
 proc test(depth, breadth: int): uint32 =
-  result = sync spawn dfs(depth, breadth)
+  result = sync tp.spawn dfs(depth, breadth)
 
 proc main() =
 
@@ -38,8 +41,8 @@ proc main() =
     answer: uint32
     nthreads: int
 
-  if existsEnv"WEAVE_NUM_THREADS":
-    nthreads = getEnv"WEAVE_NUM_THREADS".parseInt()
+  if existsEnv"TP_NUM_THREADS":
+    nthreads = getEnv"TP_NUM_THREADS".parseInt()
   else:
     nthreads = countProcessors()
 
@@ -62,18 +65,14 @@ proc main() =
   when not defined(windows):
     let start = wtime_usec()
 
-  init(Weave)
+  tp = Taskpool.new()
   answer = test(depth, breadth)
-  exit(Weave)
+  tp.shutdown()
 
   when not defined(windows):
     let stop = wtime_usec()
 
-  const lazy = defined(WV_LazyFlowvar)
-  const config = if lazy: " (lazy flowvars)"
-                 else: " (eager flowvars)"
-
-  echo "Scheduler:  Weave", config
+  echo "Scheduler:  Taskpool"
   echo "Benchmark:  dfs"
   echo "Threads:    ", nthreads
   when not defined(windows):

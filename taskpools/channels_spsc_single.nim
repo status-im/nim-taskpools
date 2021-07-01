@@ -93,7 +93,7 @@ func trySend*[T](chan: var ChannelSPSCSingle, src: sink T): bool {.inline.} =
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
-  import ../memory/memory_pools
+  import system/ansi_c
 
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
@@ -157,11 +157,9 @@ when isMainModule:
   proc main() =
     echo "Testing if 2 threads can send data"
     echo "-----------------------------------"
-    var threads: array[2, Thread[ThreadArgs]]
-    var pool: TLPoolAllocator
-    pool.initialize()
 
-    var chan = pool.borrow(ChannelSPSCSingle)
+    var threads: array[2, Thread[ThreadArgs]]
+    var chan = cast[ptr ChannelSPSCSingle](c_calloc(1, csize_t sizeof(ChannelSPSCSingle)))
     chan[].initialize(itemSize = sizeof(int))
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
@@ -170,7 +168,7 @@ when isMainModule:
     joinThread(threads[0])
     joinThread(threads[1])
 
-    recycle(chan)
+    c_free(chan)
 
     echo "-----------------------------------"
     echo "Success"

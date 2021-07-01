@@ -54,7 +54,11 @@ proc park*(en: var EventNotifier) {.inline.} =
   ## Wait until we are signaled of an event
   ## Thread is parked and does not consume CPU resources
   en.lock.acquire()
-  preCondition: en.signals == 0
+
+  if en.signals > 0:
+    en.signals -= 1
+    en.lock.release()
+    return
 
   en.parked += 1
   while en.signals == 0: # handle spurious wakeups
