@@ -6,10 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./channels_spsc_single,
   system/ansi_c,
+  std/os,
   ./instrumentation/contracts,
-  std/os
+  ./channels_spsc_single,
+  ./primitives/allocs
 
 {.push gcsafe.}
 
@@ -32,13 +33,13 @@ type
 
 proc newFlowVar*(T: typedesc): Flowvar[T] {.inline.} =
   let size = 2 + sizeof(T) # full flag + item size + buffer
-  result.chan = cast[ptr ChannelSPSCSingle](c_calloc(1, csize_t size))
+  result.chan = wv_allocAligned(ChannelSPSCSingle, size, alignment = 64)
   result.chan[].initialize(sizeof(T))
 
 proc cleanup(fv: Flowvar) {.inline.} =
   # TODO: Nim v1.4+ can use "sink Flowvar"
   if not fv.chan.isNil:
-    c_free(fv.chan)
+    wv_freeAligned(fv.chan)
 
 func isSpawned*(fv: Flowvar): bool {.inline.} =
   ## Returns true if a flowvar is spawned
