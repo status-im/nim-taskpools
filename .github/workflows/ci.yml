@@ -7,7 +7,7 @@ jobs:
       fail-fast: false
       max-parallel: 20
       matrix:
-        branch: [version-1-2, nightly]
+        branch: [version-1-2, devel]
         target:
           - os: linux
             cpu: amd64
@@ -83,7 +83,7 @@ jobs:
           else
             arch=32
           fi
-          curl -L "https://nim-lang.org/download/mingw$arch-6.3.0.7z" -o "external/mingw$arch.7z"
+          curl -L "https://nim-lang.org/download/mingw$arch.7z" -o "external/mingw$arch.7z"
           curl -L "https://nim-lang.org/download/windeps.zip" -o external/windeps.zip
           7z x "external/mingw$arch.7z" -oexternal/
           7z x external/windeps.zip -oexternal/dlls
