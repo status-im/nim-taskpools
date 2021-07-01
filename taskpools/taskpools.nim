@@ -43,7 +43,7 @@ import
   ./channels_spsc_single,
   ./chase_lev_deques,
   ./event_notifiers,
-  ./primitives/barriers,
+  ./primitives/[barriers, allocs],
   ./instrumentation/[contracts, loggers],
   ./sparsesets,
   ./flowvars,
@@ -98,6 +98,7 @@ type
   Taskpool* = ptr object
     barrier: SyncBarrier
       ## Barrier for initialization and teardown
+    # --- Align: 64
     eventNotifier: EventNotifier
       ## Puts thread to sleep
 
@@ -348,14 +349,16 @@ proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [Except
   ## Initialize a threadpool that manages `numThreads` threads.
   ## Default to the number of logical processors available.
 
-  var tp = cast[T](c_calloc(1, csize_t sizeof(default(Taskpool)[])))
+  type TpObj = typeof(default(Taskpool)[])
+  # Event notifier requires an extra 64 bytes for alignment
+  var tp = wv_allocAligned(TpObj, sizeof(TpObj) + 64, 64)
 
   tp.barrier.init(numThreads.int32)
   tp.eventNotifier.initialize()
   tp.numThreads = numThreads
-  tp.workerDeques = cast[ptr UncheckedArray[ChaseLevDeque[TaskNode]]](c_calloc(csize_t numThreads, csize_t sizeof ChaseLevDeque[TaskNode]))
-  tp.workers = cast[ptr UncheckedArray[Thread[(Taskpool, WorkerID)]]](c_calloc(csize_t numThreads, csize_t sizeof Thread[(Taskpool, WorkerID)]))
-  tp.workerSignals = cast[ptr UncheckedArray[Signal]](c_calloc(csize_t numThreads, csize_t sizeof Signal))
+  tp.workerDeques = wv_allocArrayAligned(ChaseLevDeque[TaskNode], numThreads, alignment = 64)
+  tp.workers = wv_allocArrayAligned(Thread[(Taskpool, WorkerID)], numThreads, alignment = 64)
+  tp.workerSignals = wv_allocArrayAligned(Signal, numThreads, alignment = 64)
 
   # Setup master thread
   workerContext.id = 0
@@ -397,13 +400,13 @@ proc cleanup(tp: var TaskPool) {.raises: [OSError].} =
   for i in 1 ..< tp.numThreads:
     joinThread(tp.workers[i])
 
-  tp.workerSignals.c_free()
-  tp.workers.c_free()
-  tp.workerDeques.c_free()
+  tp.workerSignals.wv_freeAligned()
+  tp.workers.wv_freeAligned()
+  tp.workerDeques.wv_freeAligned()
   `=destroy`(tp.eventNotifier)
   tp.barrier.delete()
 
-  tp.c_free()
+  tp.wv_freeAligned()
 
 proc shutdown*(tp: var TaskPool) {.raises:[Exception].} =
   ## Wait until all tasks are processed and then shutdown the taskpool
