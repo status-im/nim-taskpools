@@ -345,7 +345,7 @@ proc syncAll*(pool: Taskpool) {.raises: [Exception].} =
 # Runtime
 # ---------------------------------------------
 
-proc new*(T: type Taskpool, numThreads = countProcessors(), pinToCPU = false): T {.raises: [Exception].} =
+proc new*(T: type Taskpool, numThreads = countProcessors(), pinThreadsToCores = false): T {.raises: [Exception].} =
   ## Initialize a threadpool that manages `numThreads` threads.
   ## Default to the number of logical processors available.
   ##
@@ -353,12 +353,12 @@ proc new*(T: type Taskpool, numThreads = countProcessors(), pinToCPU = false): T
   ## This improves performance of memory-intensive workloads by avoiding
   ## thrashing and reloading core caches when a thread moves around.
   ##
-  ## pinToCPU option is ignored in:
+  ## pinThreadsToCores option is ignored in:
   ## - In C++ compilation with Microsoft Visual Studio Compiler
   ## - MacOS
   ## - Android
   #
-  # pinToCPU Status:
+  # pinThreadsToCores Status:
   # - C++ MSVC: implementation missing (need to wrap reinterpret_cast)
   # - Android: API missing and unclear benefits due to Big.Little architecture
   # - MacOS: API missing
@@ -378,7 +378,7 @@ proc new*(T: type Taskpool, numThreads = countProcessors(), pinToCPU = false): T
   workerContext.id = 0
   workerContext.taskpool = tp
 
-  if pinToCPU:
+  if pinThreadsToCores:
     when not(defined(cpp) and defined(vcc)):
       # TODO: Nim casts between Windows Handles but that requires reinterpret cast for C++
       pinToCpu(0)
@@ -387,7 +387,7 @@ proc new*(T: type Taskpool, numThreads = countProcessors(), pinToCPU = false): T
   for i in 1 ..< numThreads:
     createThread(tp.workers[i], worker_entry_fn, (tp, WorkerID(i)))
 
-    if pinToCPU:
+    if pinThreadsToCores:
       # TODO: we might want to take into account Hyper-Threading (HT)
       #       and allow spawning tasks and pinning to cores that are not HT-siblings.
       #       This is important for memory-bound workloads (like copy, addition, ...)
