@@ -193,6 +193,7 @@ proc new(T: type TaskNode, parent: TaskNode, task: sink Task): T =
 proc runTask(tn: var TaskNode) {.raises:[Exception], inline.} =
   ## Run a task and consumes the taskNode
   tn.task.invoke()
+  tn.task.`=destroy`()
   tn.c_free()
 
 proc schedule(ctx: WorkerContext, tn: sink TaskNode) {.inline.} =
