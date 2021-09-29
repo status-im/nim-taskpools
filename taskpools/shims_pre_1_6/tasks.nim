@@ -61,12 +61,13 @@ type
   Task* = object ## `Task` contains the callback and its arguments.
     callback: proc (args: pointer) {.nimcall, gcsafe.}
     args: pointer
-    destroy: proc (args: pointer) {.nimcall.}
+    destroy: proc (args: pointer) {.nimcall, gcsafe.}
 
+# XXX: ⚠️ No destructors for 1.2 due to unreliable codegen
 
-proc `=copy`*(x: var Task, y: Task) {.error.}
+# proc `=copy`*(x: var Task, y: Task) {.error.}
 
-proc `=destroy`*(t: var Task) {.inline.} =
+proc shim_destroy*(t: var Task) {.inline, gcsafe.} =
   ## Frees the resources allocated for a `Task`.
   if t.args != nil:
     if t.destroy != nil:
@@ -221,7 +222,12 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
     let destroyName = genSym(nskProc, "destroyScratch")
     let objTemp2 = genSym(ident = "obj")
     let tempNode = quote("@") do:
-        `=destroy`(@objTemp2[])
+        # XXX:
+        # We avoid destructors for Nim 1.2 due to bad codegen
+        # For taskpool there are no destructor to run.
+        # We ensure that by checking that we only operate on plain old data
+        static: doAssert supportsCopyMem(@scratchObjType)
+        # `=destroy`(@objTemp2[])
 
     result = quote do:
       `stmtList`

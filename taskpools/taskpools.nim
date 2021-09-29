@@ -193,7 +193,11 @@ proc new(T: type TaskNode, parent: TaskNode, task: sink Task): T =
 proc runTask(tn: var TaskNode) {.raises:[Exception], inline.} =
   ## Run a task and consumes the taskNode
   tn.task.invoke()
-  tn.task.`=destroy`()
+  when (NimMajor,NimMinor,NimPatch) >= (1,6,0):
+    {.gcsafe.}: # Upstream missing tagging `=destroy` as gcsafe
+      tn.task.`=destroy`()
+  else:
+    tn.task.shim_destroy()
   tn.c_free()
 
 proc schedule(ctx: WorkerContext, tn: sink TaskNode) {.inline.} =
