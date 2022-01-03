@@ -59,7 +59,8 @@ else:
   import ./primitives/affinity_posix
 
 when (NimMajor,NimMinor,NimPatch) >= (1,6,0):
-  import std/tasks
+  import std/[isolation, tasks]
+  export isolation
 else:
   import ./shims_pre_1_6/tasks
 

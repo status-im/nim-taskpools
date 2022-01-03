@@ -9,7 +9,7 @@
 # ----------------------------------------------------------------------------------
 
 type
-  Pthread {.importc: "pthread_t", header: "<sys/types.h>".} = distinct culong
+  Pthread {.importc: "pthread_t", header: "<sys/types.h>".} = object
   CpuSet {.byref, importc: "cpu_set_t", header: "<sched.h>".} = object
 
 proc pthread_self(): Pthread {.header: "<pthread.h>".}
