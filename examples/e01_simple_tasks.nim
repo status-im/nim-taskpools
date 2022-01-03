@@ -1,5 +1,4 @@
 import ../taskpools/taskpools
-import std/macros
 
 block: # Async without result
 

@@ -1,7 +1,7 @@
 mode = ScriptMode.Verbose
 
 packageName   = "taskpools"
-version       = "0.0.1"
+version       = "0.0.2"
 author        = "Status Research & Development GmbH"
 description   = "lightweight, energy-efficient, easily auditable threadpool"
 license       = "MIT"
@@ -16,14 +16,12 @@ proc test(flags, path: string) =
   #       but is much faster than -d:debug
 
   # Compilation language is controlled by TEST_LANG
-  var lang = "c"
-  if existsEnv"TEST_LANG":
-    lang = getEnv"TEST_LANG"
+  let lang = getEnv("TEST_LANG", "c")
 
   echo "\n========================================================================================"
   echo "Running [ ", lang, " ", flags, " ] ", path
   echo "========================================================================================"
-  exec "nim " & lang & " " & flags & " --verbosity:0 --hints:off --warnings:off --threads:on -d:release --stacktrace:on --linetrace:on --outdir:build -r " & path
+  exec "nim " & lang & " " & getEnv("NIMFLAGS") & " " & flags & " --verbosity:0 --hints:off --warnings:off --threads:on -d:release --stacktrace:on --linetrace:on --outdir:build -r --skipParentCfg --skipUserCfg " & path
 
 task test, "Run Taskpools tests":
   # Internal data structures
