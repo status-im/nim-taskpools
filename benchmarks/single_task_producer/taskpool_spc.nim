@@ -99,8 +99,8 @@ proc main() =
     quit 1
 
   var nthreads: int
-  if existsEnv"WEAVE_NUM_THREADS":
-    nthreads = getEnv"WEAVE_NUM_THREADS".parseInt()
+  if existsEnv"TP_NUM_THREADS":
+    nthreads = getEnv"TP_NUM_THREADS".parseInt()
   else:
     nthreads = countProcessors()
 

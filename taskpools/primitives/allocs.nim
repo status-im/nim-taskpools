@@ -5,14 +5,13 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  system/ansi_c
+import system/ansi_c
 
 # Helpers
 # ----------------------------------------------------------------------------------
 
-proc isPowerOfTwo*(n: int): bool {.inline.} =
-  (n and (n - 1)) == 0
+func isPowerOfTwo(n: int): bool {.inline.} =
+  (n and (n - 1)) == 0 and (n != 0)
 
 # TODO: cannot dispatch at compile-time due to https://github.com/nim-lang/Nim/issues/12726
 # but all our use-case are for power of 2

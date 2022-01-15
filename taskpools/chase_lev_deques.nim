@@ -109,9 +109,6 @@ proc grow[T](deque: var ChaseLevDeque[T], buf: var ptr Buf[T], top, bottom: int)
   for i in top ..< bottom:
     tmp[][i] = buf[][i]
 
-  # This requires 68+ billions tasks in flight (per-thread)
-  ascertain: deque.garbageUsed.int < deque.garbage.len
-
   buf.prev = deque.garbage
   deque.garbage = buf
   # publish globally
