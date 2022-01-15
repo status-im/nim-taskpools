@@ -58,17 +58,11 @@ template alloca*(T: typedesc): ptr T =
 template alloca*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
   cast[ptr UncheckedArray[T]](alloca(sizeof(T) * len))
 
-proc wv_alloc*(T: typedesc, len: SomeInteger): ptr UncheckedArray[T] {.inline.} =
-  when defined(WV_useNimAlloc):
-    cast[type result](createSharedU(T, len))
-  else:
-    cast[type result](c_malloc(csize_t len*sizeof(T)))
+proc tp_alloc*(T: typedesc, len: SomeInteger): ptr UncheckedArray[T] {.inline.} =
+  cast[type result](c_malloc(csize_t len*sizeof(T)))
 
-proc wv_free*[T: ptr](p: T) {.inline.} =
-  when defined(WV_useNimAlloc):
-    freeShared(p)
-  else:
-    c_free(p)
+proc tp_free*[T: ptr](p: T) {.inline.} =
+  c_free(p)
 
 # We assume that Nim zeroMem vs C memset
 # and Nim copyMem vs C memcpy have no difference
@@ -99,7 +93,7 @@ proc nqueens_ser(n, j: int32, a: CharArray): int32 =
   if n == j:
     # Good solution count it
     if example_solution.isNil:
-      example_solution = wv_alloc(char, n)
+      example_solution = tp_alloc(char, n)
       copyMem(example_solution, a, n * sizeof(char))
       return 1
 

@@ -44,44 +44,48 @@ template deref*(T: typedesc): typedesc =
   ## Return the base object type behind a ptr type
   typeof(default(T)[])
 
-proc wv_alloc*(T: typedesc): ptr T {.inline.}=
-  ## Default allocator for the Picasso library
+proc tp_alloc*(T: typedesc, zero: static bool = false): ptr T {.inline.}=
+  ## Default allocator for the Taskpools library
   ## This allocates memory to hold the type T
   ## and returns a pointer to it
   ##
   ## Can use Nim allocator to measure the overhead of its lock
   ## Memory is not zeroed
-  when defined(WV_useNimAlloc):
-    createSharedU(T)
-  else:
-    cast[ptr T](c_malloc(csize_t sizeof(T)))
+  result = cast[ptr T](c_malloc(csize_t sizeof(T)))
+  when zero:
+    zeroMem(result, sizeof(T))
 
-proc wv_allocPtr*(T: typedesc[ptr], zero: static bool = false): T {.inline.}=
-  ## Default allocator for the Picasso library
+proc tp_allocPtr*(T: typedesc[ptr], zero: static bool = false): T {.inline.}=
+  ## Default allocator for the Taskpools library
   ## This allocates memory to hold the
   ## underlying type of the pointer type T.
   ## i.e. if T is ptr int, this allocates an int
   ##
   ## Can use Nim allocator to measure the overhead of its lock
-  ## Memory is not zeroed
-  result = wv_alloc(deref(T))
+  ## Memory is zeroed if requested
+  result = tp_alloc(deref(T))
   when zero:
     zeroMem(result, sizeof(deref(T)))
 
-proc wv_alloc*(T: typedesc, len: SomeInteger): ptr UncheckedArray[T] {.inline.} =
-  ## Default allocator for the Picasso library.
+proc tp_alloc*(T: typedesc, len: SomeInteger): ptr UncheckedArray[T] {.inline.} =
+  ## Default allocator for the Taskpools library.
   ## This allocates a contiguous chunk of memory
   ## to hold ``len`` elements of type T
   ## and returns a pointer to it.
   ##
   ## Can use Nim allocator to measure the overhead of its lock
   ## Memory is not zeroed
-  when defined(WV_useNimAlloc):
-    cast[type result](createSharedU(T, len))
-  else:
-    cast[type result](c_malloc(csize_t len*sizeof(T)))
+  cast[type result](c_malloc(csize_t len*sizeof(T)))
 
-proc wv_free*[T: ptr](p: T) {.inline.} =
+proc tp_allocUnchecked*(T: typedesc, size: SomeInteger, zero: static bool = false): ptr T {.inline.} =
+  ## Default allocator for the Taskpools library.
+  ## This allocates "size" bytes.
+  ## This is for datastructure which contained an UncheckedArray field
+  result = cast[type result](c_malloc(csize_t size))
+  when zero:
+    zeroMem(result, size)
+
+proc tp_free*[T: ptr](p: T) {.inline.} =
   when defined(WV_useNimAlloc):
     freeShared(p)
   else:
@@ -101,19 +105,19 @@ template alloca*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
 when defined(windows):
   proc aligned_alloc_windows(size, alignment: csize_t): pointer {.sideeffect,importc:"_aligned_malloc", header:"<malloc.h>".}
     # Beware of the arg order!
-  proc wv_freeAligned*[T](p: ptr T){.sideeffect,importc:"_aligned_free", header:"<malloc.h>".}
+  proc tp_freeAligned*[T](p: ptr T){.sideeffect,importc:"_aligned_free", header:"<malloc.h>".}
 elif defined(osx):
   proc posix_memalign(mem: var pointer, alignment, size: csize_t){.sideeffect,importc, header:"<stdlib.h>".}
   proc aligned_alloc(alignment, size: csize_t): pointer {.inline.} =
     posix_memalign(result, alignment, size)
-  proc wv_freeAligned*[T](p: ptr T){.inline.} =
+  proc tp_freeAligned*[T](p: ptr T){.inline.} =
     c_free(p)
 else:
   proc aligned_alloc(alignment, size: csize_t): pointer {.sideeffect,importc, header:"<stdlib.h>".}
-  proc wv_freeAligned*[T](p: ptr T){.inline.} =
+  proc tp_freeAligned*[T](p: ptr T){.inline.} =
     c_free(p)
 
-proc wv_allocAligned*(T: typedesc, alignment: static Natural): ptr T {.inline.} =
+proc tp_allocAligned*(T: typedesc, alignment: static Natural): ptr T {.inline.} =
   ## aligned_alloc requires allocating in multiple of the alignment.
   static:
     assert alignment.isPowerOfTwo()
@@ -126,7 +130,7 @@ proc wv_allocAligned*(T: typedesc, alignment: static Natural): ptr T {.inline.} 
   else:
     cast[ptr T](aligned_alloc(csize_t alignment, csize_t requiredMem))
 
-proc wv_allocAligned*(T: typedesc, size: int, alignment: static Natural): ptr T {.inline.} =
+proc tp_allocAligned*(T: typedesc, size: int, alignment: static Natural): ptr T {.inline.} =
   ## aligned_alloc requires allocating in multiple of the alignment.
   static:
     assert alignment.isPowerOfTwo()
@@ -138,7 +142,7 @@ proc wv_allocAligned*(T: typedesc, size: int, alignment: static Natural): ptr T 
   else:
     cast[ptr T](aligned_alloc(csize_t alignment, csize_t requiredMem))
 
-proc wv_allocArrayAligned*(T: typedesc, len: int, alignment: static Natural): ptr UncheckedArray[T] {.inline.} =
+proc tp_allocArrayAligned*(T: typedesc, len: int, alignment: static Natural): ptr UncheckedArray[T] {.inline.} =
   ## aligned_alloc requires allocating in multiple of the alignment.
   static:
     assert alignment.isPowerOfTwo()

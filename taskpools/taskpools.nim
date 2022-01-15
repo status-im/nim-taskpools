@@ -142,7 +142,7 @@ proc setupWorker() =
   ctx.currentTask = nil
 
   # Init
-  ctx.taskDeque[].init()
+  ctx.taskDeque[].init(initialCapacity = 32)
 
 proc teardownWorker() =
   ## Cleanup the thread-local context of a worker
@@ -185,8 +185,7 @@ proc workerEntryFn(params: tuple[taskpool: Taskpool, id: WorkerID])
 # ---------------------------------------------
 
 proc new(T: type TaskNode, parent: TaskNode, task: sink Task): T =
-  type TaskNodeObj = typeof(default(T)[])
-  var tn = cast[TaskNode](c_calloc(1, csize_t sizeof(TaskNodeObj)))
+  var tn = tp_allocPtr(TaskNode)
   tn.parent = parent
   tn.task = task
   return tn
@@ -371,14 +370,14 @@ proc new*(T: type Taskpool, numThreads = countProcessors(), pinThreadsToCores = 
 
   type TpObj = typeof(default(Taskpool)[])
   # Event notifier requires an extra 64 bytes for alignment
-  var tp = wv_allocAligned(TpObj, sizeof(TpObj) + 64, 64)
+  var tp = tp_allocAligned(TpObj, sizeof(TpObj) + 64, 64)
 
   tp.barrier.init(numThreads.int32)
   tp.eventNotifier.initialize()
   tp.numThreads = numThreads
-  tp.workerDeques = wv_allocArrayAligned(ChaseLevDeque[TaskNode], numThreads, alignment = 64)
-  tp.workers = wv_allocArrayAligned(Thread[(Taskpool, WorkerID)], numThreads, alignment = 64)
-  tp.workerSignals = wv_allocArrayAligned(Signal, numThreads, alignment = 64)
+  tp.workerDeques = tp_allocArrayAligned(ChaseLevDeque[TaskNode], numThreads, alignment = 64)
+  tp.workers = tp_allocArrayAligned(Thread[(Taskpool, WorkerID)], numThreads, alignment = 64)
+  tp.workerSignals = tp_allocArrayAligned(Signal, numThreads, alignment = 64)
 
   # Setup master thread
   workerContext.id = 0
@@ -424,13 +423,13 @@ proc cleanup(tp: var TaskPool) {.raises: [OSError].} =
   for i in 1 ..< tp.numThreads:
     joinThread(tp.workers[i])
 
-  tp.workerSignals.wv_freeAligned()
-  tp.workers.wv_freeAligned()
-  tp.workerDeques.wv_freeAligned()
+  tp.workerSignals.tp_freeAligned()
+  tp.workers.tp_freeAligned()
+  tp.workerDeques.tp_freeAligned()
   `=destroy`(tp.eventNotifier)
   tp.barrier.delete()
 
-  tp.wv_freeAligned()
+  tp.tp_freeAligned()
 
 proc shutdown*(tp: var TaskPool) {.raises:[Exception].} =
   ## Wait until all tasks are processed and then shutdown the taskpool
