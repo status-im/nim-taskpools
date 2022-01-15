@@ -53,11 +53,6 @@ export
   # flowvars
   Flowvar, isSpawned, isReady, sync
 
-when defined(windows):
-  import ./primitives/affinity_windows
-else:
-  import ./primitives/affinity_posix
-
 when (NimMajor,NimMinor,NimPatch) >= (1,6,0):
   import std/[isolation, tasks]
   export isolation
@@ -350,23 +345,9 @@ proc syncAll*(pool: Taskpool) {.raises: [Exception].} =
 # Runtime
 # ---------------------------------------------
 
-proc new*(T: type Taskpool, numThreads = countProcessors(), pinThreadsToCores = false): T {.raises: [Exception].} =
+proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [Exception].} =
   ## Initialize a threadpool that manages `numThreads` threads.
   ## Default to the number of logical processors available.
-  ##
-  ## If pinToCPU is set, threads spawned will be pinned to the core that spawned them.
-  ## This improves performance of memory-intensive workloads by avoiding
-  ## thrashing and reloading core caches when a thread moves around.
-  ##
-  ## pinThreadsToCores option is ignored in:
-  ## - In C++ compilation with Microsoft Visual Studio Compiler
-  ## - MacOS
-  ## - Android
-  #
-  # pinThreadsToCores Status:
-  # - C++ MSVC: implementation missing (need to wrap reinterpret_cast)
-  # - Android: API missing and unclear benefits due to Big.Little architecture
-  # - MacOS: API missing
 
   type TpObj = typeof(default(Taskpool)[])
   # Event notifier requires an extra 64 bytes for alignment
@@ -383,25 +364,9 @@ proc new*(T: type Taskpool, numThreads = countProcessors(), pinThreadsToCores = 
   workerContext.id = 0
   workerContext.taskpool = tp
 
-  if pinThreadsToCores:
-    when not(defined(cpp) and defined(vcc)):
-      # TODO: Nim casts between Windows Handles but that requires reinterpret cast for C++
-      pinToCpu(0)
-
   # Start worker threads
   for i in 1 ..< numThreads:
     createThread(tp.workers[i], worker_entry_fn, (tp, WorkerID(i)))
-
-    if pinThreadsToCores:
-      # TODO: we might want to take into account Hyper-Threading (HT)
-      #       and allow spawning tasks and pinning to cores that are not HT-siblings.
-      #       This is important for memory-bound workloads (like copy, addition, ...)
-      #       where both sibling cores will compete for L1 and L2 cache, effectively
-      #       halving the memory bandwidth or worse, flushing what the other put in cache.
-      #       Note that while 2x siblings is common, Xeon Phi has 4x Hyper-Threading.
-      when not(defined(cpp) and defined(vcc)):
-        # TODO: Nim casts between Windows Handles but that requires reinterpret cast for C++
-        pinToCpu(tp.workers[i], i)
 
   # Root worker
   setupWorker()
