@@ -28,6 +28,11 @@ type
     itemSize*: uint8
     buffer*{.align: 8.}: UncheckedArray[byte]
 
+when (NimMajor,NimMinor,NimPatch) <= (1,4,0):
+  type AssertionDefect = AssertionError
+
+{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
+
 proc `=`(
     dest: var ChannelSPSCSingle,
     source: ChannelSPSCSingle
@@ -75,6 +80,8 @@ func trySend*[T](chan: var ChannelSPSCSingle, src: sink T): bool {.inline.} =
   cast[ptr T](chan.buffer.addr)[] = src
   chan.full.store(true, moRelease)
   return true
+
+{.pop.} # raises: [AssertionDefect]
 
 # Sanity checks
 # ------------------------------------------------------------------------------

@@ -35,7 +35,10 @@
 # In case a thread is blocked for IO, other threads can steal pending tasks in that thread.
 # If all threads are pending for IO, the threadpool will not make any progress and be soft-locked.
 
-{.push raises: [].}
+when (NimMajor,NimMinor,NimPatch) <= (1,4,0):
+  type AssertionDefect = AssertionError
+
+{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
 
 import
   system/ansi_c,
@@ -182,6 +185,7 @@ proc workerEntryFn(params: tuple[taskpool: Taskpool, id: WorkerID])
 proc new(T: type TaskNode, parent: TaskNode, task: sink Task): T =
   var tn = tp_allocPtr(TaskNode)
   tn.parent = parent
+  wasMoved(tn.task) # tn.task is uninitialized, prevent Nim from running the Task destructor
   tn.task = task
   return tn
 
@@ -381,7 +385,7 @@ proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [Except
   discard tp.barrier.wait()
   return tp
 
-proc cleanup(tp: var TaskPool) {.raises: [OSError].} =
+proc cleanup(tp: var TaskPool) {.raises: [AssertionDefect, OSError].} =
   ## Cleanup all resources allocated by the taskpool
   preCondition: workerContext.currentTask.task.isRootTask()
 
