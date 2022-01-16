@@ -35,8 +35,8 @@ proc main() =
     echo &"Usage: {exeName} <n-th fibonacci number requested:{n}>"
     quit 1
 
-  if existsEnv"WEAVE_NUM_THREADS":
-    nthreads = getEnv"WEAVE_NUM_THREADS".parseInt()
+  if existsEnv"TP_NUM_THREADS":
+    nthreads = getEnv"TP_NUM_THREADS".parseInt()
   else:
     nthreads = countProcessors()
 
