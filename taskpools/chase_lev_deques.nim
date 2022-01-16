@@ -35,17 +35,21 @@
 # To reduce contention, stealing is done on the opposite end from push/pop
 # so that there is a race only for the very last task.
 
-{.push raises: [].}
-
 import
   system/ansi_c,
   std/[locks, typetraits, atomics],
-  ./instrumentation/[contracts, loggers]
+  ./instrumentation/[contracts, loggers],
+  ./primitives/allocs
 
 type
   Buf[T] = object
     ## Backend buffer of a ChaseLevDeque
     ## `capacity` MUST be a power of 2
+
+    # Note: update tp_allocUnchecked allocation if any field changes.
+    # Unused. There is no memory reclamation scheme.
+    prev: ptr Buf[T]
+
     capacity: int
     mask: int        # == capacity-1 implies (i and mask) == (i mod capacity)
     rawBuffer: UncheckedArray[Atomic[T]]
@@ -55,15 +59,19 @@ type
     ## The owning thread enqueues and dequeues at the bottom
     ## Foreign threads steal at the top.
     ##
-    ## Default queue size is 8
-    ## Queue can grow to handle up to 34 359 738 368 tasks in flights
-    ## TODO:
-    ##   with --gc:arc / --gc:orc, use a seq instead of a fixed max size.
+    ## There is no memory reclamation scheme for simplicity.
     top {.align: 64.}: Atomic[int]
     bottom: Atomic[int]
     buf: Atomic[ptr Buf[T]]
-    garbage: array[32, ptr Buf[T]] # up to 34 359 738 368 sized buffer
-    garbageUsed: uint8
+    garbage: ptr Buf[T]
+
+when (NimMajor,NimMinor,NimPatch) <= (1,4,0):
+  type AssertionDefect = AssertionError
+
+{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
+{.push overflowChecks: off.}       # We don't want exceptions (for Defect) in a multithreaded context
+                                   # but we don't to deal with underflow of unsigned int either
+                                   # say "if a < b - c" with c > b
 
 func isPowerOfTwo(n: int): bool {.inline.} =
   (n and (n - 1)) == 0 and (n != 0)
@@ -75,13 +83,16 @@ proc newBuf(T: typedesc, capacity: int): ptr Buf[T] =
 
   preCondition: capacity.isPowerOfTwo()
 
-  result = cast[ptr Buf[T]](
-    c_malloc(csize_t 2*sizeof(int) + sizeof(T)*capacity)
+  result = tp_allocUnchecked(
+    Buf[T],
+    1*sizeof(pointer) + 2*sizeof(int) + sizeof(T)*capacity,
+    zero = true
   )
 
+  # result.prev = nil
   result.capacity = capacity
   result.mask = capacity - 1
-  result.rawBuffer.addr.zeroMem(sizeof(T)*capacity)
+  # result.rawBuffer.addr.zeroMem(sizeof(T)*capacity)
 
 proc `[]=`[T](buf: var Buf[T], index: int, item: T) {.inline.} =
   buf.rawBuffer[index and buf.mask].store(item, moRelaxed)
@@ -102,25 +113,28 @@ proc grow[T](deque: var ChaseLevDeque[T], buf: var ptr Buf[T], top, bottom: int)
   for i in top ..< bottom:
     tmp[][i] = buf[][i]
 
-  # This requires 68+ billions tasks in flight (per-thread)
-  ascertain: deque.garbageUsed.int < deque.garbage.len
-
-  deque.garbage[deque.garbageUsed] = buf
+  buf.prev = deque.garbage
+  deque.garbage = buf
+  # publish globally
+  deque.buf.store(tmp, moRelaxed)
+  # publish locally
   swap(buf, tmp)
-  deque.buf.store(buf, moRelaxed)
 
 # Public API
 # ---------------------------------------------------
 
-proc init*[T](deque: var ChaseLevDeque[T]) =
+proc init*[T](deque: var ChaseLevDeque[T], initialCapacity: int) =
   ## Initializes a new Chase-lev work-stealing deque.
   deque.reset()
-  deque.buf.store(newBuf(T, 8), moRelaxed)
+  deque.buf.store(newBuf(T, initialCapacity), moRelaxed)
 
 proc teardown*[T](deque: var ChaseLevDeque[T]) =
   ## Teardown a Chase-lev work-stealing deque.
-  for i in 0 ..< deque.garbageUsed.int:
-    c_free(deque.garbage[i])
+  var node = deque.garbage
+  while node != nil:
+    let tmp = node.prev
+    c_free(node)
+    node = tmp
   c_free(deque.buf.load(moRelaxed))
 
 proc push*[T](deque: var ChaseLevDeque[T], item: T) =
@@ -179,3 +193,6 @@ proc steal*[T](deque: var ChaseLevDeque[T]): T =
     if not compare_exchange(deque.top, t, t+1, moSequentiallyConsistent, moRelaxed):
       # Failed race.
       return default(T)
+
+{.pop.} # overflowChecks
+{.pop.} # raises: [AssertionDefect]

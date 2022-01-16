@@ -33,13 +33,13 @@ type
 
 proc newFlowVar*(T: typedesc): Flowvar[T] {.inline.} =
   let size = 2 + sizeof(T) # full flag + item size + buffer
-  result.chan = wv_allocAligned(ChannelSPSCSingle, size, alignment = 64)
+  result.chan = tp_allocAligned(ChannelSPSCSingle, size, alignment = 64)
   result.chan[].initialize(sizeof(T))
 
 proc cleanup(fv: Flowvar) {.inline.} =
   # TODO: Nim v1.4+ can use "sink Flowvar"
   if not fv.chan.isNil:
-    wv_freeAligned(fv.chan)
+    tp_freeAligned(fv.chan)
 
 func isSpawned*(fv: Flowvar): bool {.inline.} =
   ## Returns true if a flowvar is spawned

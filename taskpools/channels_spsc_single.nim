@@ -22,25 +22,16 @@ type
     ##   - Padded to avoid false sharing in collections
     ##   - No extra indirection to access the item, the buffer is inline the channel
     ##   - Linearizable
-    ##   - Default usable size is 254 bytes (WV_MemBlockSize - 2).
-    ##     If used in an intrusive manner, it's 126 bytes due to the default 128 bytes padding.
     ##
     ## The channel should be the last field of an object if used in an intrusive manner
-    ##
-    ## Motivations for type erasure
-    ## - when LazyFlowvar needs to be converted
-    ##   from stack-allocated memory to heap to extended their lifetime
-    ##   we have no type information at all as the whole runtime
-    ##   and especially tasks does not retain it.
-    ##
-    ## - When a task depends on a future that was generated from lazy loop-splitting
-    ##   we don't have type information either.
-    ##
-    ## - An extra benefit is probably easier embedding, or calling
-    ##   from C or JIT code.
     full{.align: 64.}: Atomic[bool]
     itemSize*: uint8
     buffer*{.align: 8.}: UncheckedArray[byte]
+
+when (NimMajor,NimMinor,NimPatch) <= (1,4,0):
+  type AssertionDefect = AssertionError
+
+{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
 
 proc `=`(
     dest: var ChannelSPSCSingle,
@@ -89,6 +80,8 @@ func trySend*[T](chan: var ChannelSPSCSingle, src: sink T): bool {.inline.} =
   cast[ptr T](chan.buffer.addr)[] = src
   chan.full.store(true, moRelease)
   return true
+
+{.pop.} # raises: [AssertionDefect]
 
 # Sanity checks
 # ------------------------------------------------------------------------------

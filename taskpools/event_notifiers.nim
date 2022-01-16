@@ -36,6 +36,14 @@ type
     parked: int
     signals: int
 
+when (NimMajor,NimMinor,NimPatch) <= (1,4,0):
+  type AssertionDefect = AssertionError
+
+{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
+{.push overflowChecks: off.}       # We don't want exceptions (for Defect) in a multithreaded context
+                                   # but we don't to deal with underflow of unsigned int either
+                                   # say "if a < b - c" with c > b
+
 func initialize*(en: var EventNotifier) {.inline.} =
   ## Initialize the event notifier
   en.lock.initLock()
@@ -84,3 +92,6 @@ proc getParked*(en: var EventNotifier): int {.inline.} =
   en.lock.acquire()
   result = en.parked
   en.lock.release()
+
+{.pop.} # overflowChecks
+{.pop.} # raises: [AssertionDefect]

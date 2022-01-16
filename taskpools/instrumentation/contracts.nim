@@ -13,7 +13,7 @@ import macros, os, strutils
 # ----------------------------------------------------------------------------------
 
 # Everything should be a template that doesn't produce any code
-# when WV_Asserts is not defined.
+# when TP_Asserts is not defined.
 # Those checks are controlled by a custom flag instead of
 # "--boundsChecks" or "--nilChecks" to decouple them from user code checks.
 # Furthermore, we want them to be very lightweight on performance
@@ -74,19 +74,24 @@ macro assertContract(
               "\n    The following values are contrary to expectations:" &
               "\n        "
   let values = inspectInfix(strippedPredicate)
-  let myID = quote do:
-    when declared(myID):
-      $myID()
+  let workerID = quote do:
+    when declared(workerContext):
+      $workerContext.id
+    else:
+      "N/A"
+  let taskpoolID = quote do:
+    when declared(workerContext):
+      "0x" & cast[ByteAddress](workerContext.taskpool).toHex().toLowerAscii()
     else:
       "N/A"
 
   result = quote do:
     {.noSideEffect.}:
       when compileOption("assertions"):
-        assert(`predicate`, `debug` & $`values` & "  [Worker " & `myID` & "]\n")
-      elif defined(WV_Asserts):
+        assert(`predicate`, `debug` & $`values` & "  [Worker " & `workerID` & " on taskpool " & `taskpoolID` & "]\n")
+      elif defined(TP_Asserts):
         if unlikely(not(`predicate`)):
-          raise newException(AssertionError, `debug` & $`values` & '\n')
+          raise newException(AssertionError, `debug` & $`values` & "  [Worker " & `workerID` & " on taskpool " & `taskpoolID` & "]\n")
 
 # A way way to get the caller function would be nice.
 

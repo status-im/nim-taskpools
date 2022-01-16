@@ -8,7 +8,8 @@
 import
   std/random,
   system/ansi_c,
-  ./instrumentation/contracts
+  ./instrumentation/contracts,
+  ./primitives/allocs
 
 const TP_MaxWorkers = 255
 type Setuint = uint8 # We support at most 255 threads (0xFF is kept as special value to signify absence in the set)
@@ -40,7 +41,7 @@ func allocate*(s: var SparseSet, capacity: SomeInteger) {.inline.} =
   preCondition: capacity <= TP_MaxWorkers
 
   s.capacity = Setuint capacity
-  s.rawBuffer = cast[ptr UncheckedArray[Setuint]](c_calloc(csize_t 2*capacity, csize_t sizeof(Setuint)))
+  s.rawBuffer = tp_alloc(Setuint, 2*capacity)
   s.indices = s.rawBuffer
   s.values = cast[ptr UncheckedArray[Setuint]](s.rawBuffer[capacity].addr)
 
