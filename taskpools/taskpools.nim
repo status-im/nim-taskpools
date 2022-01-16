@@ -95,13 +95,14 @@ type
     victims: SparseSet
 
   Taskpool* = ptr object
+    ## A taskpool schedules procedures to be executed in parallel
     barrier: SyncBarrier
       ## Barrier for initialization and teardown
     # --- Align: 64
     eventNotifier: EventNotifier
       ## Puts thread to sleep
 
-    numThreads*{.align: 64.}: int
+    numThreads{.align: 64.}: int
     workerDeques: ptr UncheckedArray[ChaseLevDeque[TaskNode]]
       ## Direct access for task stealing
     workers: ptr UncheckedArray[Thread[(Taskpool, WorkerID)]]
@@ -300,7 +301,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) {.raises:[Exception].}
       # We don't park as there is no notif for task completion
       cpuRelax()
 
-proc syncAll*(pool: Taskpool) {.raises: [Exception].} =
+proc syncAll*(tp: Taskpool) {.raises: [Exception].} =
   ## Blocks until all pending tasks are completed
   ## This MUST only be called from
   ## the root scope that created the taskpool
@@ -334,7 +335,7 @@ proc syncAll*(pool: Taskpool) {.raises: [Exception].} =
       taskNode.runTask()
     else:
       # 2.2 No task to steal
-      if pool.eventNotifier.getParked() == pool.numThreads - 1:
+      if tp.eventNotifier.getParked() == tp.numThreads - 1:
         # 2.2.1 all threads besides the current are parked
         debugTermination:
           log("Worker %2d: syncAll 2.2.1 - termination, all other threads sleeping\n", ctx.id)
