@@ -128,7 +128,7 @@ The following types and procedures are exposed:
 
 The following are non-goals:
 
-- Supporting GC-ed memory on Nim default GC (sequences and strings)
+- Supporting GC-ed types with Nim default GC (sequences and strings). Using no GC or --gc:arc, --gc:orc or --gc:boehm (any GC that doesn't have thread-local heaps).
 - Having async-awaitable tasks
 - Running on environments without dynamic memory allocation
 - High-Performance Computing specificities (distribution on many machines or GPUs or machines with 200+ cores or multi-sockets)
