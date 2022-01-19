@@ -45,7 +45,7 @@ import
   std/[random, cpuinfo, atomics, macros],
   ./channels_spsc_single,
   ./chase_lev_deques,
-  ./event_notifiers,
+  ./eventcounts,
   ./primitives/[barriers, allocs],
   ./instrumentation/[contracts, loggers],
   ./sparsesets,
@@ -85,7 +85,7 @@ type
     currentTask: TaskNode
 
     # Synchronization
-    eventNotifier: ptr EventNotifier # shared event notifier
+    eventcount: ptr Eventcount # shared event notifier
     signal: ptr Signal               # owned signal
 
     # Thefts
@@ -99,7 +99,7 @@ type
     barrier: SyncBarrier
       ## Barrier for initialization and teardown
     # --- Align: 64
-    eventNotifier: EventNotifier
+    eventcount: Eventcount
       ## Puts thread to sleep
 
     numThreads{.align: 64.}: int
@@ -132,7 +132,7 @@ proc setupWorker() =
   ctx.victims.allocate(ctx.taskpool.numThreads)
 
   # Synchronization
-  ctx.eventNotifier = addr ctx.taskpool.eventNotifier
+  ctx.eventcount = addr ctx.taskpool.eventcount
   ctx.signal = addr ctx.taskpool.workerSignals[ctx.id]
   ctx.signal.terminate.store(false, moRelaxed)
 
@@ -204,7 +204,7 @@ proc schedule(ctx: WorkerContext, tn: sink TaskNode) {.inline.} =
   ## Schedule a task in the taskpool
   debug: log("Worker %2d: schedule task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, tn, tn.parent, ctx.currentTask)
   ctx.taskDeque[].push(tn)
-  ctx.taskpool.eventNotifier.notify()
+  ctx.taskpool.eventcount.wake()
 
 # Scheduler
 # ---------------------------------------------
@@ -237,15 +237,17 @@ proc eventLoop(ctx: var WorkerContext) {.raises:[Exception].} =
 
     # 2. Run out of tasks, become a thief
     debug: log("Worker %2d: eventLoop 2 - becoming a thief\n", ctx.id)
+    let ticket = ctx.eventcount[].sleepy()
     var stolenTask = ctx.trySteal()
     if not stolenTask.isNil:
       # 2.a Run task
       debug: log("Worker %2d: eventLoop 2.a - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, stolenTask, stolenTask.parent, ctx.currentTask)
+      ctx.eventcount[].cancelSleep()
       stolenTask.runTask()
     else:
       # 2.b Park the thread until a new task enters the taskpool
       debug: log("Worker %2d: eventLoop 2.b - sleeping\n", ctx.id)
-      ctx.eventNotifier[].park()
+      ctx.eventcount[].sleep(ticket)
       debug: log("Worker %2d: eventLoop 2.b - waking\n", ctx.id)
 
 # Tasking
@@ -335,7 +337,7 @@ proc syncAll*(tp: Taskpool) {.raises: [Exception].} =
       taskNode.runTask()
     else:
       # 2.2 No task to steal
-      if tp.eventNotifier.getParked() == tp.numThreads - 1:
+      if tp.eventcount.getParked() == tp.numThreads - 1:
         # 2.2.1 all threads besides the current are parked
         debugTermination:
           log("Worker %2d: syncAll 2.2.1 - termination, all other threads sleeping\n", ctx.id)
@@ -359,7 +361,7 @@ proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [Except
   var tp = tp_allocAligned(TpObj, sizeof(TpObj) + 64, 64)
 
   tp.barrier.init(numThreads.int32)
-  tp.eventNotifier.initialize()
+  tp.eventcount.initialize()
   tp.numThreads = numThreads
   tp.workerDeques = tp_allocArrayAligned(ChaseLevDeque[TaskNode], numThreads, alignment = 64)
   tp.workers = tp_allocArrayAligned(Thread[(Taskpool, WorkerID)], numThreads, alignment = 64)
@@ -396,7 +398,7 @@ proc cleanup(tp: var TaskPool) {.raises: [AssertionDefect, OSError].} =
   tp.workerSignals.tp_freeAligned()
   tp.workers.tp_freeAligned()
   tp.workerDeques.tp_freeAligned()
-  `=destroy`(tp.eventNotifier)
+  `=destroy`(tp.eventcount)
   tp.barrier.delete()
 
   tp.tp_freeAligned()
@@ -410,9 +412,7 @@ proc shutdown*(tp: var TaskPool) {.raises:[Exception].} =
   for i in 0 ..< tp.numThreads:
     tp.workerSignals[i].terminate.store(true, moRelaxed)
 
-  let parked = tp.eventNotifier.getParked()
-  for i in 0 ..< parked:
-    tp.eventNotifier.notify()
+  tp.eventcount.wakeAll()
 
   # 1 matching barrier in worker_entry_fn
   discard tp.barrier.wait()
