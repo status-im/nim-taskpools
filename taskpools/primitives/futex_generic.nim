@@ -40,6 +40,7 @@ proc wake*(futex: var Futex) {.inline.} =
   ## Wake one thread (from the same process)
   futex.cond.signal()
 
+type Errno = cint
 proc pthread_cond_broadcast(cond: var Cond): Errno {.header:"<pthread.h>".}
   ## Nim only signal one thread in locks
   ## We need to unblock all
