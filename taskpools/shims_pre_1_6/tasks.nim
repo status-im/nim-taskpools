@@ -59,9 +59,10 @@ when compileOption("threads"):
 
 type
   Task* = object ## `Task` contains the callback and its arguments.
-    callback: proc (args: pointer) {.nimcall, gcsafe.}
+    callback{.align:64.}: proc (args: pointer) {.nimcall, gcsafe.}
     args: pointer
     destroy: proc (args: pointer) {.nimcall, gcsafe.}
+    argsBuffer: array[40, byte]
 
 # XXX: ⚠️ No destructors for 1.2 due to unreliable codegen
 
@@ -192,14 +193,18 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
                       )
                     )
 
+    let task = genSym(kind = nskVar, ident = "task")
+    let taskAssign = quote do:
+      var `task` = Task()
 
     let scratchObjPtrType = quote do:
       cast[ptr `scratchObjType`](c_calloc(csize_t 1, csize_t sizeof(`scratchObjType`)))
 
-    let scratchLetSection = newLetStmt(
-      scratchIdent,
-      scratchObjPtrType
-    )
+    let scratchLetSection = quote do:
+      when sizeof(`scratchObjType`) > 40:
+        let `scratchIdent` = cast[ptr `scratchObjType`](`task`.argsBuffer.addr)
+      else:
+        let `scratchIdent` = `scratchObjPtrType`
 
     let scratchCheck = quote do:
       if `scratchIdent`.isNil:
@@ -208,6 +213,7 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
         raise newException(OutOfMemError, "Could not allocate memory")
 
     var stmtList = newStmtList()
+    stmtList.add(taskAssign)
     stmtList.add(scratchObj)
     stmtList.add(scratchLetSection)
     stmtList.add(scratchCheck)
@@ -240,7 +246,10 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
         let `objTemp2` = cast[ptr `scratchObjType`](args)
         `tempNode`
 
-      Task(callback: `funcName`, args: `scratchIdent`, destroy: `destroyName`)
+      `task`.callback = `funcName`
+      `task`.args = `scratchIdent`
+      `task`.destroy = `destroyName`
+      `task`
   else:
     let funcCall = newCall(e[0])
     let funcName = genSym(nskProc, e[0].strVal)
@@ -249,6 +258,8 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
       proc `funcName`(args: pointer) {.gcsafe, nimcall.} =
         `funcCall`
 
+      # Hopefully the compiler can optimize away the unused `task`
+      # but it's just a PoC
       Task(callback: `funcName`, args: nil)
 
   when defined(nimTasksDebug):

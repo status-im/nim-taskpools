@@ -56,7 +56,8 @@ export
   # flowvars
   Flowvar, isSpawned, isReady, sync
 
-when (NimMajor,NimMinor,NimPatch) >= (1,6,0):
+# Always use our PoC
+when false: # (NimMajor,NimMinor,NimPatch) >= (1,6,0):
   import std/[isolation, tasks]
   export isolation
 else:
