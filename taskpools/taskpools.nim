@@ -412,7 +412,8 @@ proc shutdown*(tp: var TaskPool) {.raises:[Exception].} =
   for i in 0 ..< tp.numThreads:
     tp.workerSignals[i].terminate.store(true, moRelaxed)
 
-  tp.eventcount.wakeAll()
+  for i in 0 ..< tp.numThreads:
+    tp.eventcount.wake()
 
   # 1 matching barrier in worker_entry_fn
   discard tp.barrier.wait()

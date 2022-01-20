@@ -21,7 +21,7 @@ proc initialize*(futex: var Futex) {.inline.} =
   futex.value.store(0, moRelaxed)
 
 proc teardown*(futex: var Futex) {.inline.} =
-  futex.store(0, moRelaxed)
+  futex.value.store(0, moRelaxed)
 
 proc WaitOnAddress(
         Address: pointer, CompareAddress: pointer,
