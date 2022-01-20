@@ -11,6 +11,9 @@ when defined(linux):
 elif defined(windows):
   import ../primitives/futex_windows
   export futex_windows
+elif defined(macos):
+  import ../primitives/futex_darwin
+  export futex_darwin
 else:
   import ../primitives/futex_generic
   export futex_generic

@@ -12,7 +12,7 @@ export MemoryOrder
 
 type
   Futex* = object
-    value: Atomic[int32]
+    value: Atomic[uint32]
 
 # Contrary to the documentation, the futex related primitives are NOT in kernel32.dll
 # but in api-ms-win-core-synch-l1-2-0.dll ¯\_(ツ)_/¯
@@ -41,7 +41,7 @@ proc loadMut*(futex: var Futex): var Atomic[uint32] {.inline.} =
 proc store*(futex: var Futex, value: uint32, order: MemoryOrder) {.inline.} =
   futex.value.store(value, order)
 
-proc wait*(futex: var Futex, refVal: int32) {.inline.} =
+proc wait*(futex: var Futex, refVal: uint32) {.inline.} =
   ## Suspend a thread if the value of the futex is the same as refVal.
 
   # Returns TRUE if the wait succeeds or FALSE if not.
