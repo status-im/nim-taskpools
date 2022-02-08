@@ -90,7 +90,6 @@ type
 
     # Thefts
     rng: Rand                        # RNG state to select victims
-    numThreads: int
     otherDeques: ptr UncheckedArray[ChaseLevDeque[TaskNode]]
     victims: SparseSet
 
@@ -102,7 +101,7 @@ type
     eventNotifier: EventNotifier
       ## Puts thread to sleep
 
-    numThreads{.align: 64.}: int
+    numThreads*{.align: 64.}: int
     workerDeques: ptr UncheckedArray[ChaseLevDeque[TaskNode]]
       ## Direct access for task stealing
     workers: ptr UncheckedArray[Thread[(Taskpool, WorkerID)]]
@@ -127,7 +126,6 @@ proc setupWorker() =
 
   # Thefts
   ctx.rng = initRand(0xEFFACED + ctx.id)
-  ctx.numThreads = ctx.taskpool.numThreads
   ctx.otherDeques = ctx.taskpool.workerDeques
   ctx.victims.allocate(ctx.taskpool.numThreads)
 
@@ -322,7 +320,7 @@ proc syncAll*(tp: Taskpool) {.raises: [Exception].} =
       debug: log("Worker %2d: syncAll 1 - running task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
       taskNode.runTask()
 
-    if ctx.numThreads == 1 or foreignThreadsParked:
+    if tp.numThreads == 1 or foreignThreadsParked:
       break
 
     # 2. Help other threads
