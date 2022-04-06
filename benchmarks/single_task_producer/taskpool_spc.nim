@@ -70,7 +70,7 @@ proc spc_produce(n: int32) =
 
 proc spc_produce_seq(n: int32) =
   for i in 0 ..< n:
-    spc_consume_no_poll(TaskGranularity)
+    spc_consume_nopoll(TaskGranularity)
 
 proc main() =
   NumTasksTotal = 1000000

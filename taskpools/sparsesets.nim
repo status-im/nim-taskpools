@@ -99,7 +99,7 @@ func excl*(s: var SparseSet, n: SomeInteger) {.inline.} =
   s.len -= 1
   let lastVal = s.values[s.len]
 
-  s.indices[lastVal] = del_idx         # Last value now points to deleted index
+  s.indices[lastVal] = delIdx         # Last value now points to deleted index
   s.values[delIdx] = s.values[lastVal] # Deleted item is now last value
 
   # Erase the item

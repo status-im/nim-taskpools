@@ -170,7 +170,7 @@ proc pop*[T](deque: var ChaseLevDeque[T]): T =
     result = a[][b]
     if t == b:
       # Single last element in queue.
-      if not compare_exchange(deque.top, t, t+1, moSequentiallyConsistent, moRelaxed):
+      if not compareExchange(deque.top, t, t+1, moSequentiallyConsistent, moRelaxed):
         # Failed race.
         result = default(T)
       deque.bottom.store(b+1, moRelaxed)
@@ -190,7 +190,7 @@ proc steal*[T](deque: var ChaseLevDeque[T]): T =
     # Non-empty queue.
     let a = deque.buf.load(moConsume)
     result = a[][t]
-    if not compare_exchange(deque.top, t, t+1, moSequentiallyConsistent, moRelaxed):
+    if not compareExchange(deque.top, t, t+1, moSequentiallyConsistent, moRelaxed):
       # Failed race.
       return default(T)
 

@@ -90,10 +90,10 @@ template checkIsolate(scratchAssignList: seq[NimNode], procParam, scratchDotExpr
   # XXX: Fix sym bindings
   # scratchAssignList.add newVarStmt(isolatedTemp, newCall(newidentNode("isolate"), procParam))
   # scratchAssignList.add newAssignment(scratchDotExpr,
-  #     newcall(newIdentNode("extract"), isolatedTemp))
+  #     newCall(newIdentNode("extract"), isolatedTemp))
   scratchAssignList.add newVarStmt(isolatedTemp, newCall(bindSym("isolate"), procParam))
   scratchAssignList.add newAssignment(scratchDotExpr,
-      newcall(bindSym("extract"), isolatedTemp))
+      newCall(bindSym("extract"), isolatedTemp))
 
 template addAllNode(assignParam: NimNode, procParam: NimNode) =
   let scratchDotExpr = newDotExpr(scratchIdent, formalParams[i][0])
@@ -164,7 +164,7 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
             error("'toTask'ed function cannot have a 'typed' or 'untyped' parameter")
           let
             seqType = nnkBracketExpr.newTree(newIdentNode("seq"), param[1])
-            seqCallNode = newcall("@", e[i])
+            seqCallNode = newCall("@", e[i])
           addAllNode(seqType, seqCallNode)
         else:
           addAllNode(param, e[i])

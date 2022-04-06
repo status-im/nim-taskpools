@@ -13,7 +13,7 @@ proc term(k: int): float =
     4'f / float(2*k + 1)
 
 proc piApprox(tp: Taskpool, n: int): float =
-  var pendingFuts = newSeq[FlowVar[float]](n)
+  var pendingFuts = newSeq[Flowvar[float]](n)
   for k in 0 ..< pendingFuts.len:
     pendingFuts[k] = tp.spawn term(k) # Schedule a task on the threadpool a return a handle to retrieve the result.
   for k in 0 ..< pendingFuts.len:
