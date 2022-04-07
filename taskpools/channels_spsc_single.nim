@@ -54,9 +54,9 @@ func tryRecv*[T](chan: var ChannelSPSCSingle, dst: var T): bool {.inline.} =
   ## Returns true if successful (channel was not empty)
   ##
   ## ⚠ Use only in the consumer thread that reads from the channel.
-  preCondition: (sizeof(T) == chan.itemsize.int) or
+  preCondition: (sizeof(T) == chan.itemSize.int) or
                 # Support dummy object
-                (sizeof(T) == 0 and chan.itemsize == 1)
+                (sizeof(T) == 0 and chan.itemSize == 1)
 
   let full = chan.full.load(moAcquire)
   if not full:
@@ -70,9 +70,9 @@ func trySend*[T](chan: var ChannelSPSCSingle, src: sink T): bool {.inline.} =
   ## Reurns true if successful (channel was empty)
   ##
   ## ⚠ Use only in the producer thread that writes from the channel.
-  preCondition: (sizeof(T) == chan.itemsize.int) or
+  preCondition: (sizeof(T) == chan.itemSize.int) or
                 # Support dummy object
-                (sizeof(T) == 0 and chan.itemsize == 1)
+                (sizeof(T) == 0 and chan.itemSize == 1)
 
   let full = chan.full.load(moAcquire)
   if full:

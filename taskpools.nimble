@@ -21,7 +21,11 @@ proc test(flags, path: string) =
   echo "\n========================================================================================"
   echo "Running [ ", lang, " ", flags, " ] ", path
   echo "========================================================================================"
-  exec "nim " & lang & " -d:TP_Asserts " & getEnv("NIMFLAGS") & " " & flags & " --verbosity:0 --hints:off --warnings:off --threads:on -d:release --stacktrace:on --linetrace:on --outdir:build -r --skipParentCfg --skipUserCfg " & path
+  exec "nim " & lang & " -d:TP_Asserts " & getEnv("NIMFLAGS") & " " & flags &
+    " --verbosity:0 --warnings:off --threads:on -d:release" &
+    " --stacktrace:on --linetrace:on --outdir:build -r --skipParentCfg --skipUserCfg" &
+    " --styleCheck:usages --styleCheck:hint" &
+    " --hint[XDeclaredButNotUsed]:off --hint[Processing]:off " & path
 
 task test, "Run Taskpools tests":
   # Internal data structures

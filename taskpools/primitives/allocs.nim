@@ -102,17 +102,17 @@ template alloca*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
   cast[ptr UncheckedArray[T]](alloca(sizeof(T) * len))
 
 when defined(windows):
-  proc aligned_alloc_windows(size, alignment: csize_t): pointer {.sideeffect,importc:"_aligned_malloc", header:"<malloc.h>".}
+  proc aligned_alloc_windows(size, alignment: csize_t): pointer {.sideEffect,importc:"_aligned_malloc", header:"<malloc.h>".}
     # Beware of the arg order!
-  proc tp_freeAligned*[T](p: ptr T){.sideeffect,importc:"_aligned_free", header:"<malloc.h>".}
+  proc tp_freeAligned*[T](p: ptr T){.sideEffect,importc:"_aligned_free", header:"<malloc.h>".}
 elif defined(osx):
-  proc posix_memalign(mem: var pointer, alignment, size: csize_t){.sideeffect,importc, header:"<stdlib.h>".}
+  proc posix_memalign(mem: var pointer, alignment, size: csize_t){.sideEffect,importc, header:"<stdlib.h>".}
   proc aligned_alloc(alignment, size: csize_t): pointer {.inline.} =
     posix_memalign(result, alignment, size)
   proc tp_freeAligned*[T](p: ptr T){.inline.} =
     c_free(p)
 else:
-  proc aligned_alloc(alignment, size: csize_t): pointer {.sideeffect,importc, header:"<stdlib.h>".}
+  proc aligned_alloc(alignment, size: csize_t): pointer {.sideEffect,importc, header:"<stdlib.h>".}
   proc tp_freeAligned*[T](p: ptr T){.inline.} =
     c_free(p)
 
