@@ -7,19 +7,19 @@
 
 when defined(windows):
   import ./barriers_windows
-  when compileOption("assertions"):
-    import os
+  import os
 
   type SyncBarrier* = SynchronizationBarrier
 
-  proc init*(syncBarrier: var SyncBarrier, threadCount: range[0'i32..high(int32)]) {.inline.} =
+  proc init*(syncBarrier: var SyncBarrier, threadCount: int) {.inline.} =
     ## Initialize a synchronization barrier that will block ``threadCount`` threads
     ## before release.
+    if threadCount <= 0:
+      raiseOSError(OSErrorCode(87)) # ERROR_INVALID_PARAMETER
+
     let err {.used.} = InitializeSynchronizationBarrier(syncBarrier, threadCount, -1)
-    when compileOption("assertions"):
-      if err != 1:
-        assert err == 0
-        raiseOSError(osLastError())
+    if err != 1:
+      raiseOSError(osLastError())
 
   proc wait*(syncBarrier: var SyncBarrier): bool {.inline.} =
     ## Blocks thread at a synchronization barrier.
@@ -35,35 +35,40 @@ when defined(windows):
 
 else:
   import ./barriers_posix
-  when compileOption("assertions"):
-    import os
+  import os
 
-  type SyncBarrier* = PthreadBarrier
+  from posix import EINVAL
 
-  proc init*(syncBarrier: var SyncBarrier, threadCount: range[0'i32..high(int32)]) {.inline.} =
+  type SyncBarrier* = Pthread_barrier
+
+  proc init*(syncBarrier: var SyncBarrier, threadCount: int) {.inline.} =
     ## Initialize a synchronization barrier that will block ``threadCount`` threads
     ## before release.
-    let err {.used.} = pthread_barrier_init(syncBarrier, nil, threadCount)
-    when compileOption("assertions"):
-      if err != 0:
-        raiseOSError(OSErrorCode(err))
+    if threadCount <= 0:
+      raiseOSError(OSErrorCode(EINVAL))
+
+    when sizeof(int) > sizeof(cuint):
+      if threadCount > cuint.high.int:
+        raiseOSError(OSErrorCode(EINVAL))
+
+    let err = pthread_barrier_init(syncBarrier, nil, cuint threadCount)
+    if err != 0:
+      raiseOSError(OSErrorCode(err))
 
   proc wait*(syncBarrier: var SyncBarrier): bool {.inline.} =
     ## Blocks thread at a synchronization barrier.
     ## Returns true for one of the threads (the last one on Windows, undefined on Posix)
     ## and false for the others.
-    let err {.used.} = pthread_barrier_wait(syncBarrier)
-    when compileOption("assertions"):
-      if err != PTHREAD_BARRIER_SERIAL_THREAD and err < 0:
-        raiseOSError(OSErrorCode(err))
-    result = if err == PTHREAD_BARRIER_SERIAL_THREAD: true
-             else: false
+    let res = pthread_barrier_wait(syncBarrier)
+    if res != PTHREAD_BARRIER_SERIAL_THREAD and res < 0:
+      raiseOSError(OSErrorCode(res))
+
+    res == PTHREAD_BARRIER_SERIAL_THREAD
 
   proc delete*(syncBarrier: sink SyncBarrier) {.inline.} =
     ## Deletes a synchronization barrier.
     ## This assumes no race between waiting at a barrier and deleting it,
     ## and reuse of the barrier requires initialization.
     let err {.used.} = pthread_barrier_destroy(syncBarrier)
-    when compileOption("assertions"):
-      if err < 0:
-        raiseOSError(OSErrorCode(err))
+    if err < 0:
+      raiseOSError(OSErrorCode(err))

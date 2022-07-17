@@ -13,26 +13,22 @@
 import locks
 
 type
-  Natural32 = range[0'i32..high(int32)]
-
-  Errno* = cint
-
-  PthreadAttr* = object
+  Pthread_attr* = object
     ## Dummy
-  PthreadBarrier* = object
+  Pthread_barrier* = object
     ## Implementation of a sense reversing barrier
     ## (The Art of Multiprocessor Programming by Maurice Herlihy & Nir Shavit)
 
     lock: Lock                      # Alternatively spinlock on Atomic
     cond {.guard: lock.}: Cond
     sense {.guard: lock.}: bool     # Choose int32 to avoid zero-expansion cost in registers?
-    left {.guard: lock.}: Natural32 # Number of threads missing at the barrier before opening
-    count: Natural32                # Total number of threads that need to arrive before opening the barrier
+    left {.guard: lock.}: cuint     # Number of threads missing at the barrier before opening
+    count: cuint                    # Total number of threads that need to arrive before opening the barrier
 
 const
-  PTHREAD_BARRIER_SERIAL_THREAD* = Errno(1)
+  PTHREAD_BARRIER_SERIAL_THREAD* = 1
 
-proc pthread_cond_broadcast(cond: var Cond): Errno {.header:"<pthread.h>".}
+proc pthread_cond_broadcast(cond: var Cond): cint {.header:"<pthread.h>".}
   ## Nim only signal one thread in locks
   ## We need to unblock all
 
@@ -40,10 +36,10 @@ proc broadcast(cond: var Cond) {.inline.}=
   discard pthread_cond_broadcast(cond)
 
 func pthread_barrier_init*(
-        barrier: var PthreadBarrier,
-        attr: ptr PthreadAttr,
-        count: range[0'i32..high(int32)]
-      ): Errno =
+        barrier: var Pthread_barrier,
+        attr: ptr Pthread_attr,
+        count: cuint
+      ): cint =
   barrier.lock.initLock()
   {.locks: [barrier.lock].}:
     barrier.cond.initCond()
@@ -51,7 +47,7 @@ func pthread_barrier_init*(
   barrier.count = count
   # barrier.sense = false
 
-proc pthread_barrier_wait*(barrier: var PthreadBarrier): Errno =
+proc pthread_barrier_wait*(barrier: var Pthread_barrier): cint =
   ## Wait on `barrier`
   ## Returns PTHREAD_BARRIER_SERIAL_THREAD for a single arbitrary thread
   ## Returns 0 for the other
@@ -78,11 +74,12 @@ proc pthread_barrier_wait*(barrier: var PthreadBarrier): Errno =
 
     # Reversed, we can leave the barrier
     barrier.lock.release()
-    return Errno(0)
+    0
 
-proc pthread_barrier_destroy*(barrier: var PthreadBarrier): Errno =
+proc pthread_barrier_destroy*(barrier: var Pthread_barrier): cint =
   {.locks: [barrier.lock].}:
     barrier.cond.deinitCond()
   barrier.lock.deinitLock()
+  0
 
 # TODO: tests

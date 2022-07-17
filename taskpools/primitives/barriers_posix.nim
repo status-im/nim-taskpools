@@ -15,37 +15,17 @@ when not compileOption("threads"):
 
 when defined(osx):
   import ./barriers_macos
-  export PthreadAttr, PthreadBarrier, Errno, PTHREAD_BARRIER_SERIAL_THREAD
-else:
-  type
-    PthreadAttr* {.byref, importc: "pthread_attr_t", header: "<sys/types.h>".} = object
-    PthreadBarrier* {.byref, importc: "pthread_barrier_t", header: "<sys/types.h>".} = object
-
-    Errno* = cint
-
-  var PTHREAD_BARRIER_SERIAL_THREAD* {.importc, header:"<pthread.h>".}: Errno
-
-# Pthread
-# -------------------------------------------------------
-when defined(osx):
   export pthread_barrier_init, pthread_barrier_wait, pthread_barrier_destroy
+
 else:
-  proc pthread_barrier_init*(
-        barrier: PthreadBarrier,
-        attr: PthreadAttr or ptr PthreadAttr,
-        count: range[0'i32..high(int32)]
-      ): Errno {.header: "<pthread.h>".}
-    ## Initialize `barrier` with the attributes `attr`.
-    ## The barrier is opened when `count` waiters arrived.
+  import posix
+  # in `posix`, these take a `ptr` as first argument and wrongly use cint for a3
+  proc pthread_barrier_destroy*(a1: var Pthread_barrier): cint {.
+    importc, header: "<pthread.h>".}
+  proc pthread_barrier_init*(a1: var Pthread_barrier,
+          a2: ptr Pthread_barrierattr, a3: cuint): cint {.
+          importc, header: "<pthread.h>".}
+  proc pthread_barrier_wait*(a1: var Pthread_barrier): cint {.
+    importc, header: "<pthread.h>".}
 
-  proc pthread_barrier_destroy*(
-        barrier: sink PthreadBarrier): Errno {.header: "<pthread.h>".}
-    ## Destroy a previously dynamically initialized `barrier`.
-
-  proc pthread_barrier_wait*(
-        barrier: var PthreadBarrier
-      ): Errno {.header: "<pthread.h>".}
-    ## Wait on `barrier`
-    ## Returns PTHREAD_BARRIER_SERIAL_THREAD for a single arbitrary thread
-    ## Returns 0 for the other
-    ## Returns Errno if there is an error
+export Pthread_attr, Pthread_barrier, PTHREAD_BARRIER_SERIAL_THREAD
