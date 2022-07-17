@@ -17,7 +17,12 @@ when defined(windows):
     if threadCount <= 0:
       raiseOSError(OSErrorCode(87)) # ERROR_INVALID_PARAMETER
 
-    let err {.used.} = InitializeSynchronizationBarrier(syncBarrier, threadCount, -1)
+    when sizeof(int) > sizeof(LONG):
+      if threadCount > LONG.high.int:
+        raiseOSError(OSErrorCode(87))
+
+    let err = InitializeSynchronizationBarrier(
+      syncBarrier, LONG threadCount, -1)
     if err != 1:
       raiseOSError(osLastError())
 
