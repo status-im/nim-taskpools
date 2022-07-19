@@ -15,12 +15,12 @@ when not compileOption("threads"):
 
 when defined(osx):
   import ./barriers_macos
-  export PthreadAttr, PthreadBarrier, Errno, PTHREAD_BARRIER_SERIAL_THREAD
+  export PthreadBarrierAttr, PthreadBarrier, Errno, PTHREAD_BARRIER_SERIAL_THREAD
 else:
   type
-    PthreadAttr* {.importc: "pthread_attr_t", header: "<sys/types.h>", bycopy.} = object
+    PthreadBarrierAttr* {.importc: "pthread_barrierattr_t", header: "<sys/types.h>", bycopy.} = object
       when (defined(linux) and not defined(android)) and defined(amd64):
-        abi: array[56 div sizeof(clong), clong] # https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/x86/nptl/bits/pthreadtypes-arch.h;h=dd06d6753ebc80d94ede6c3c18227a3ad3104570;hb=HEAD#l26
+        abi: array[4 div sizeof(cint), cint] # https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/x86/nptl/bits/pthreadtypes-arch.h;h=dd06d6753ebc80d94ede6c3c18227a3ad3104570;hb=HEAD#l45
     PthreadBarrier* {.bycopy, importc: "pthread_barrier_t", header: "<sys/types.h>", bycopy.} = object
       when (defined(linux) and not defined(android)) and defined(amd64):
         abi: array[32 div sizeof(clong), clong] # https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/x86/nptl/bits/pthreadtypes-arch.h;h=dd06d6753ebc80d94ede6c3c18227a3ad3104570;hb=HEAD#l28
@@ -36,7 +36,7 @@ when defined(osx):
 else:
   proc pthread_barrier_init*(
         barrier: var PthreadBarrier,
-        attr: ptr PthreadAttr,
+        attr: ptr PthreadBarrierAttr,
         count: cuint
       ): Errno {.header: "<pthread.h>".}
     ## Initialize `barrier` with the attributes `attr`.

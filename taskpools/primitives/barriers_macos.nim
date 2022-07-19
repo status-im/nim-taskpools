@@ -15,7 +15,7 @@ import locks
 type
   Errno* = cint
 
-  PthreadAttr* = object
+  PthreadBarrierAttr* = object
     ## Dummy
   PthreadBarrier* = object
     ## Implementation of a sense reversing barrier
@@ -39,7 +39,7 @@ proc broadcast(cond: var Cond) {.inline.}=
 
 func pthread_barrier_init*(
         barrier: var PthreadBarrier,
-        attr: ptr PthreadAttr,
+        attr: ptr PthreadBarrierAttr,
         count: cuint
       ): Errno =
   barrier.lock.initLock()
