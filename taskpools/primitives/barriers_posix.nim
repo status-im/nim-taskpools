@@ -37,6 +37,7 @@ else:
   # TODO careful, this function mutates `barrier` without it being `var` which
   #      is allowed as a consequence of `byref` - it is also different from the
   #      one in barriers_macos
+  #      see https://github.com/status-im/nim-taskpools/pull/20#discussion_r923843093
   proc pthread_barrier_init*(
         barrier: PthreadBarrier,
         attr: ptr PthreadBarrierAttr,
