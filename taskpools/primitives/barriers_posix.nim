@@ -34,6 +34,9 @@ else:
 when defined(osx):
   export pthread_barrier_init, pthread_barrier_wait, pthread_barrier_destroy
 else:
+  # TODO careful, this function mutates `barrier` without it being `var` which
+  #      is allowed as a consequence of `byref` - it is also different from the
+  #      one in barriers_macos
   proc pthread_barrier_init*(
         barrier: PthreadBarrier,
         attr: ptr PthreadBarrierAttr,
@@ -42,6 +45,7 @@ else:
     ## Initialize `barrier` with the attributes `attr`.
     ## The barrier is opened when `count` waiters arrived.
 
+  # TODO the macos signature is var instead of sink
   proc pthread_barrier_destroy*(
         barrier: sink PthreadBarrier): Errno {.header: "<pthread.h>".}
     ## Destroy a previously dynamically initialized `barrier`.
