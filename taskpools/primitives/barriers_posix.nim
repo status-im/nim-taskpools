@@ -21,7 +21,7 @@ else:
     PthreadBarrierAttr* {.importc: "pthread_barrierattr_t", header: "<sys/types.h>", bycopy.} = object
       when (defined(linux) and not defined(android)) and defined(amd64):
         abi: array[4 div sizeof(cint), cint] # https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/x86/nptl/bits/pthreadtypes-arch.h;h=dd06d6753ebc80d94ede6c3c18227a3ad3104570;hb=HEAD#l45
-    PthreadBarrier* {.bycopy, importc: "pthread_barrier_t", header: "<sys/types.h>", bycopy.} = object
+    PthreadBarrier* {.importc: "pthread_barrier_t", header: "<sys/types.h>", bycopy.} = object
       when (defined(linux) and not defined(android)) and defined(amd64):
         abi: array[32 div sizeof(clong), clong] # https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/x86/nptl/bits/pthreadtypes-arch.h;h=dd06d6753ebc80d94ede6c3c18227a3ad3104570;hb=HEAD#l28
 
