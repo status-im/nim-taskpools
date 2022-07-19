@@ -18,12 +18,12 @@ when defined(osx):
   export PthreadAttr, PthreadBarrier, Errno, PTHREAD_BARRIER_SERIAL_THREAD
 else:
   type
-    PthreadAttr* {.importc: "pthread_attr_t", header: "<sys/types.h>".} = object
+    PthreadAttr* {.importc: "pthread_attr_t", header: "<sys/types.h>", bycopy.} = object
       when (defined(linux) and not defined(android)) and defined(amd64):
-        abi: array[56 div sizeof(clong), clong]
-    PthreadBarrier* {.importc: "pthread_barrier_t", header: "<sys/types.h>".} = object
+        abi: array[56 div sizeof(clong), clong] # https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/x86/nptl/bits/pthreadtypes-arch.h;h=dd06d6753ebc80d94ede6c3c18227a3ad3104570;hb=HEAD#l26
+    PthreadBarrier* {.bycopy, importc: "pthread_barrier_t", header: "<sys/types.h>", bycopy.} = object
       when (defined(linux) and not defined(android)) and defined(amd64):
-        abi: array[32 div sizeof(clong), clong]
+        abi: array[32 div sizeof(clong), clong] # https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/x86/nptl/bits/pthreadtypes-arch.h;h=dd06d6753ebc80d94ede6c3c18227a3ad3104570;hb=HEAD#l28
 
     Errno* = cint
 
@@ -37,13 +37,13 @@ else:
   proc pthread_barrier_init*(
         barrier: var PthreadBarrier,
         attr: ptr PthreadAttr,
-        count: range[0'i32..high(int32)]
+        count: cuint
       ): Errno {.header: "<pthread.h>".}
     ## Initialize `barrier` with the attributes `attr`.
     ## The barrier is opened when `count` waiters arrived.
 
   proc pthread_barrier_destroy*(
-        barrier: sink var PthreadBarrier): Errno {.header: "<pthread.h>".}
+        barrier: var PthreadBarrier): Errno {.header: "<pthread.h>".}
     ## Destroy a previously dynamically initialized `barrier`.
 
   proc pthread_barrier_wait*(

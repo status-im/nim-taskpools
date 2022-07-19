@@ -13,8 +13,6 @@
 import locks
 
 type
-  Natural32 = range[0'i32..high(int32)]
-
   Errno* = cint
 
   PthreadAttr* = object
@@ -26,8 +24,8 @@ type
     lock: Lock                      # Alternatively spinlock on Atomic
     cond {.guard: lock.}: Cond
     sense {.guard: lock.}: bool     # Choose int32 to avoid zero-expansion cost in registers?
-    left {.guard: lock.}: Natural32 # Number of threads missing at the barrier before opening
-    count: Natural32                # Total number of threads that need to arrive before opening the barrier
+    left {.guard: lock.}: cuint     # Number of threads missing at the barrier before opening
+    count: cuint                    # Total number of threads that need to arrive before opening the barrier
 
 const
   PTHREAD_BARRIER_SERIAL_THREAD* = Errno(1)
@@ -42,7 +40,7 @@ proc broadcast(cond: var Cond) {.inline.}=
 func pthread_barrier_init*(
         barrier: var PthreadBarrier,
         attr: ptr PthreadAttr,
-        count: range[0'i32..high(int32)]
+        count: cuint
       ): Errno =
   barrier.lock.initLock()
   {.locks: [barrier.lock].}:
