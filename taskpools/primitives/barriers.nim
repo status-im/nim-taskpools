@@ -43,7 +43,7 @@ else:
   proc init*(syncBarrier: var SyncBarrier, threadCount: range[0'i32..high(int32)]) {.inline.} =
     ## Initialize a synchronization barrier that will block ``threadCount`` threads
     ## before release.
-    let err {.used.} = pthread_barrier_init(syncBarrier, nil, threadCount)
+    let err {.used.} = pthread_barrier_init(syncBarrier, nil, cuint threadCount)
     when compileOption("assertions"):
       if err != 0:
         raiseOSError(OSErrorCode(err))

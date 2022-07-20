@@ -15,11 +15,15 @@ when not compileOption("threads"):
 
 when defined(osx):
   import ./barriers_macos
-  export PthreadAttr, PthreadBarrier, Errno, PTHREAD_BARRIER_SERIAL_THREAD
+  export PthreadBarrierAttr, PthreadBarrier, Errno, PTHREAD_BARRIER_SERIAL_THREAD
 else:
   type
-    PthreadAttr* {.byref, importc: "pthread_attr_t", header: "<sys/types.h>".} = object
-    PthreadBarrier* {.byref, importc: "pthread_barrier_t", header: "<sys/types.h>".} = object
+    PthreadBarrierAttr* {.importc: "pthread_barrierattr_t", header: "<sys/types.h>", byref.} = object
+      when (defined(linux) and not defined(android)) and defined(amd64):
+        abi: array[4 div sizeof(cint), cint] # https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/x86/nptl/bits/pthreadtypes-arch.h;h=dd06d6753ebc80d94ede6c3c18227a3ad3104570;hb=HEAD#l45
+    PthreadBarrier* {.importc: "pthread_barrier_t", header: "<sys/types.h>", byref.} = object
+      when (defined(linux) and not defined(android)) and defined(amd64):
+        abi: array[32 div sizeof(clong), clong] # https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/x86/nptl/bits/pthreadtypes-arch.h;h=dd06d6753ebc80d94ede6c3c18227a3ad3104570;hb=HEAD#l28
 
     Errno* = cint
 
@@ -30,14 +34,19 @@ else:
 when defined(osx):
   export pthread_barrier_init, pthread_barrier_wait, pthread_barrier_destroy
 else:
+  # TODO careful, this function mutates `barrier` without it being `var` which
+  #      is allowed as a consequence of `byref` - it is also different from the
+  #      one in barriers_macos
+  #      see https://github.com/status-im/nim-taskpools/pull/20#discussion_r923843093
   proc pthread_barrier_init*(
         barrier: PthreadBarrier,
-        attr: PthreadAttr or ptr PthreadAttr,
-        count: range[0'i32..high(int32)]
+        attr: ptr PthreadBarrierAttr,
+        count: cuint
       ): Errno {.header: "<pthread.h>".}
     ## Initialize `barrier` with the attributes `attr`.
     ## The barrier is opened when `count` waiters arrived.
 
+  # TODO the macos signature is var instead of sink
   proc pthread_barrier_destroy*(
         barrier: sink PthreadBarrier): Errno {.header: "<pthread.h>".}
     ## Destroy a previously dynamically initialized `barrier`.
