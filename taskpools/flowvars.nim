@@ -6,7 +6,6 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  system/ansi_c,
   std/os,
   ./instrumentation/contracts,
   ./channels_spsc_single,

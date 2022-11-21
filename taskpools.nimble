@@ -1,49 +1,50 @@
 mode = ScriptMode.Verbose
 
 packageName   = "taskpools"
-version       = "0.0.3"
+version       = "0.0.4"
 author        = "Status Research & Development GmbH"
 description   = "lightweight, energy-efficient, easily auditable threadpool"
 license       = "MIT"
+skipDirs      = @["tests"]
 
-### Dependencies
 requires "nim >= 1.2.12"
 
-proc test(flags, path: string) =
-  if not dirExists "build":
-    mkDir "build"
-  # Note: we compile in release mode. This still have stacktraces
-  #       but is much faster than -d:debug
+let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
+let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
+let flags = getEnv("NIMFLAGS", "") # Extra flags for the compiler
+let verbose = getEnv("V", "") notin ["", "0"]
 
-  # Compilation language is controlled by TEST_LANG
-  let lang = getEnv("TEST_LANG", "c")
+let styleCheckStyle = if (NimMajor, NimMinor) < (1, 6): "hint" else: "error"
+let cfg =
+  " --styleCheck:usages --styleCheck:" & styleCheckStyle &
+  (if verbose: "" else: " --verbosity:0 --hints:off") &
+  " --skipParentCfg --skipUserCfg --outdir:build --nimcache:build/nimcache -f" &
+  " --stacktrace:on --linetrace:on" &
+  " --threads:on"
 
-  echo "\n========================================================================================"
-  echo "Running [ ", lang, " ", flags, " ] ", path
-  echo "========================================================================================"
-  exec "nim " & lang & " -d:TP_Asserts " & getEnv("NIMFLAGS") & " " & flags &
-    " --verbosity:0 --warnings:off --threads:on -d:release" &
-    " --stacktrace:on --linetrace:on --outdir:build -r --skipParentCfg --skipUserCfg" &
-    " --styleCheck:usages --styleCheck:hint" &
-    " --hint[XDeclaredButNotUsed]:off --hint[Processing]:off " & path
+proc build(args, path: string) =
+  exec nimc & " " & lang & " " & cfg & " " & flags & " " & args & " " & path
+
+proc run(args, path: string) =
+  build args & " -r", path
 
 task test, "Run Taskpools tests":
   # Internal data structures
-  test "", "taskpools/channels_spsc_single.nim"
-  test "", "taskpools/sparsesets.nim"
+  run "", "taskpools/channels_spsc_single.nim"
+  run "", "taskpools/sparsesets.nim"
 
   # Examples
-  test "", "examples/e01_simple_tasks.nim"
-  test "", "examples/e02_parallel_pi.nim"
+  run "", "examples/e01_simple_tasks.nim"
+  run "", "examples/e02_parallel_pi.nim"
 
   # Benchmarks
-  test "", "benchmarks/dfs/taskpool_dfs.nim"
-  test "", "benchmarks/heat/taskpool_heat.nim"
-  test "", "benchmarks/nqueens/taskpool_nqueens.nim"
+  run "", "benchmarks/dfs/taskpool_dfs.nim"
+  run "", "benchmarks/heat/taskpool_heat.nim"
+  run "", "benchmarks/nqueens/taskpool_nqueens.nim"
 
   when not defined(windows):
-    test "", "benchmarks/single_task_producer/taskpool_spc.nim"
-    test "", "benchmarks/bouncing_producer_consumer/taskpool_bpc.nim"
+    run "", "benchmarks/single_task_producer/taskpool_spc.nim"
+    run "", "benchmarks/bouncing_producer_consumer/taskpool_bpc.nim"
 
   # TODO - generics in macro issue
-  # test "", "benchmarks/matmul_cache_oblivious/taskpool_matmul_co.nim"
+  # run "", "benchmarks/matmul_cache_oblivious/taskpool_matmul_co.nim"
