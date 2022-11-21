@@ -37,7 +37,7 @@
 
 import
   system/ansi_c,
-  std/[locks, typetraits, atomics],
+  std/atomics,
   ./instrumentation/[contracts, loggers],
   ./primitives/allocs
 
