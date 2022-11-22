@@ -17,7 +17,7 @@ when not defined(windows):
 
 var tp: Taskpool
 
-proc dfs(depth, breadth: int): uint32 =
+proc dfs(depth, breadth: int): uint32 {.gcsafe.} =
   if depth == 0:
     return 1
 
