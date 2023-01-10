@@ -90,7 +90,6 @@ type
 
     # Thefts
     rng: Rand                        # RNG state to select victims
-    numThreads: int
     otherDeques: ptr UncheckedArray[ChaseLevDeque[TaskNode]]
     victims: SparseSet
 
@@ -102,7 +101,7 @@ type
     eventNotifier: EventNotifier
       ## Puts thread to sleep
 
-    numThreads{.align: 64.}: int
+    numThreads*{.align: 64.}: int
     workerDeques: ptr UncheckedArray[ChaseLevDeque[TaskNode]]
       ## Direct access for task stealing
     workers: ptr UncheckedArray[Thread[(Taskpool, WorkerID)]]
@@ -127,7 +126,6 @@ proc setupWorker() =
 
   # Thefts
   ctx.rng = initRand(0xEFFACED + ctx.id)
-  ctx.numThreads = ctx.taskpool.numThreads
   ctx.otherDeques = ctx.taskpool.workerDeques
   ctx.victims.allocate(ctx.taskpool.numThreads)
 
@@ -322,7 +320,7 @@ proc syncAll*(tp: Taskpool) {.raises: [Exception].} =
       debug: log("Worker %2d: syncAll 1 - running task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
       taskNode.runTask()
 
-    if ctx.numThreads == 1 or foreignThreadsParked:
+    if tp.numThreads == 1 or foreignThreadsParked:
       break
 
     # 2. Help other threads
@@ -371,7 +369,7 @@ proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [Except
 
   # Start worker threads
   for i in 1 ..< numThreads:
-    createThread(tp.workers[i], worker_entry_fn, (tp, WorkerID(i)))
+    createThread(tp.workers[i], workerEntryFn, (tp, WorkerID(i)))
 
   # Root worker
   setupWorker()
@@ -386,7 +384,7 @@ proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [Except
   discard tp.barrier.wait()
   return tp
 
-proc cleanup(tp: var TaskPool) {.raises: [AssertionDefect, OSError].} =
+proc cleanup(tp: var Taskpool) {.raises: [AssertionDefect, OSError].} =
   ## Cleanup all resources allocated by the taskpool
   preCondition: workerContext.currentTask.task.isRootTask()
 
@@ -401,7 +399,7 @@ proc cleanup(tp: var TaskPool) {.raises: [AssertionDefect, OSError].} =
 
   tp.tp_freeAligned()
 
-proc shutdown*(tp: var TaskPool) {.raises:[Exception].} =
+proc shutdown*(tp: var Taskpool) {.raises:[Exception].} =
   ## Wait until all tasks are processed and then shutdown the taskpool
   preCondition: workerContext.currentTask.task.isRootTask()
   tp.syncAll()
@@ -427,7 +425,7 @@ proc shutdown*(tp: var TaskPool) {.raises:[Exception].} =
 # ---------------------------------------------
 {.pop.} # raises:[]
 
-macro spawn*(tp: TaskPool, fnCall: typed): untyped =
+macro spawn*(tp: Taskpool, fnCall: typed): untyped =
   ## Spawns the input function call asynchronously, potentially on another thread of execution.
   ##
   ## If the function calls returns a result, spawn will wrap it in a Flowvar.

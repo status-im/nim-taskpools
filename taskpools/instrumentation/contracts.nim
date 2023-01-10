@@ -59,7 +59,7 @@ proc inspectInfix(node: NimNode): NimNode =
 macro assertContract(
         checkName: static string,
         predicate: untyped) =
-  let lineinfo = lineinfoObj(predicate)
+  let lineinfo = lineInfoObj(predicate)
   let file = extractFilename(lineinfo.filename)
 
   var strippedPredicate: NimNode
