@@ -46,9 +46,7 @@ type
     ## Backend buffer of a ChaseLevDeque
     ## `capacity` MUST be a power of 2
 
-    # Note: update tp_allocUnchecked allocation if any field changes.
-    # Unused. There is no memory reclamation scheme.
-    prev: ptr Buf[T]
+    prevRetired: ptr Buf[T] # intrusive linked list. Used for garbage collection
 
     capacity: int
     mask: int        # == capacity-1 implies (i and mask) == (i mod capacity)
@@ -89,7 +87,7 @@ proc newBuf(T: typedesc, capacity: int): ptr Buf[T] =
     zero = true
   )
 
-  # result.prev = nil
+  # result.prevRetired = nil
   result.capacity = capacity
   result.mask = capacity - 1
   # result.rawBuffer.addr.zeroMem(sizeof(T)*capacity)
@@ -113,12 +111,20 @@ proc grow[T](deque: var ChaseLevDeque[T], buf: var ptr Buf[T], top, bottom: int)
   for i in top ..< bottom:
     tmp[][i] = buf[][i]
 
-  buf.prev = deque.garbage
+  buf.prevRetired = deque.garbage
   deque.garbage = buf
   # publish globally
   deque.buf.store(tmp, moRelaxed)
   # publish locally
   swap(buf, tmp)
+
+proc garbageCollect(deque: var ChaseLevDeque) {.inline.} =
+  var node = deque.garbage
+  while node != nil:
+    let tmp = node.prevRetired
+    c_free(node)
+    node = tmp
+  deque.garbage = nil
 
 # Public API
 # ---------------------------------------------------
@@ -130,11 +136,7 @@ proc init*[T](deque: var ChaseLevDeque[T], initialCapacity: int) =
 
 proc teardown*[T](deque: var ChaseLevDeque[T]) =
   ## Teardown a Chase-lev work-stealing deque.
-  var node = deque.garbage
-  while node != nil:
-    let tmp = node.prev
-    c_free(node)
-    node = tmp
+  deque.garbageCollect()
   c_free(deque.buf.load(moRelaxed))
 
 proc push*[T](deque: var ChaseLevDeque[T], item: T) =
@@ -149,6 +151,10 @@ proc push*[T](deque: var ChaseLevDeque[T], item: T) =
   if b-t > a.capacity - 1:
     # Full queue
     deque.grow(a, t, b)
+
+  if not deque.garbage.isNil and b == t:
+    # Empty queue, no thieves can have a pointer to an old retired buffer
+    deque.garbageCollect()
 
   a[][b] = item
   fence(moRelease)
