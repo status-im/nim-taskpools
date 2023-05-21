@@ -445,11 +445,9 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
 
   # Package in a task
   let taskNode = ident("taskNode")
-  let task = ident("task")
   if not needFuture:
     result.add quote do:
-      let `task` = toTask(`fnCall`)
-      let `taskNode` = TaskNode.new(workerContext.currentTask, `task`)
+      let `taskNode` = TaskNode.new(workerContext.currentTask, toTask(`fnCall`))
       schedule(workerContext, `taskNode`)
 
   else:
@@ -512,8 +510,7 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
     asyncCall.add fut
 
     result.add quote do:
-      let `task` = toTask(`asyncCall`)
-      let `taskNode` = TaskNode.new(workerContext.currentTask, `task`)
+      let `taskNode` = TaskNode.new(workerContext.currentTask, toTask(`asyncCall`))
       schedule(workerContext, `taskNode`)
 
       # Return the future / flowvar
