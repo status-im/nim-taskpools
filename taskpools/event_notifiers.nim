@@ -1,5 +1,5 @@
 # Nim-Taskpools
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
@@ -35,9 +35,6 @@ type
     cond: Cond
     parked: int
     signals: int
-
-when (NimMajor,NimMinor,NimPatch) <= (1,4,0):
-  type AssertionDefect = AssertionError
 
 {.push raises: [AssertionDefect].} # Ensure no exceptions can happen
 {.push overflowChecks: off.}       # We don't want exceptions (for Defect) in a multithreaded context

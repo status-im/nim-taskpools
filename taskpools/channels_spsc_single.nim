@@ -28,9 +28,6 @@ type
     itemSize*: uint8
     buffer*{.align: 8.}: UncheckedArray[byte]
 
-when (NimMajor,NimMinor,NimPatch) <= (1,4,0):
-  type AssertionDefect = AssertionError
-
 {.push raises: [AssertionDefect].} # Ensure no exceptions can happen
 
 proc `=`(
