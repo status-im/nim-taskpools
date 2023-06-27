@@ -53,11 +53,8 @@ export
   # flowvars
   Flowvar, isSpawned, isReady, sync
 
-when (NimMajor,NimMinor,NimPatch) >= (1,6,0):
-  import std/[isolation, tasks]
-  export isolation
-else:
-  import ./shims_pre_1_6/tasks
+import std/[isolation, tasks]
+export isolation
 
 type
   WorkerID = int32
@@ -188,11 +185,8 @@ proc new(T: type TaskNode, parent: TaskNode, task: sink Task): T =
 proc runTask(tn: var TaskNode) {.raises:[Exception], inline.} =
   ## Run a task and consumes the taskNode
   tn.task.invoke()
-  when (NimMajor,NimMinor,NimPatch) >= (1,6,0):
-    {.gcsafe.}: # Upstream missing tagging `=destroy` as gcsafe
-      tn.task.`=destroy`()
-  else:
-    tn.task.shim_destroy()
+  {.gcsafe.}: # Upstream missing tagging `=destroy` as gcsafe
+    tn.task.`=destroy`()
   tn.c_free()
 
 proc schedule(ctx: WorkerContext, tn: sink TaskNode) {.inline.} =
