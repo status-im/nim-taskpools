@@ -65,9 +65,6 @@ type
     buf: Atomic[ptr Buf[T]]
     garbage: ptr Buf[T]
 
-when (NimMajor,NimMinor,NimPatch) <= (1,4,0):
-  type AssertionDefect = AssertionError
-
 {.push raises: [AssertionDefect].} # Ensure no exceptions can happen
 {.push overflowChecks: off.}       # We don't want exceptions (for Defect) in a multithreaded context
                                    # but we don't to deal with underflow of unsigned int either
