@@ -10,14 +10,14 @@ import
   system/ansi_c, strformat, os, strutils, cpuinfo,
   # Library
   ../../taskpools
-  
+
 when not defined(windows):
   # bench
   import ../wtime
 
 var tp: Taskpool
 
-proc dfs(depth, breadth: int): uint32 {.gcsafe.} =
+proc dfs(depth, breadth: int): uint32 {.gcsafe, raises: [].} =
   if depth == 0:
     return 1
 

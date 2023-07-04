@@ -22,6 +22,8 @@
 # but requires the threadpool to be message-passing based.
 # https://github.com/mratsim/weave/blob/a230cce98a8524b2680011e496ec17de3c1039f2/weave/cross_thread_com/event_notifiers.nim
 
+{.push raises: [].} # Ensure no exceptions can happen
+
 import
   std/locks,
   ./instrumentation/contracts
@@ -36,7 +38,6 @@ type
     parked: int
     signals: int
 
-{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
 {.push overflowChecks: off.}       # We don't want exceptions (for Defect) in a multithreaded context
                                    # but we don't to deal with underflow of unsigned int either
                                    # say "if a < b - c" with c > b

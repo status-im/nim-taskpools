@@ -35,6 +35,8 @@
 # To reduce contention, stealing is done on the opposite end from push/pop
 # so that there is a race only for the very last task.
 
+{.push raises: [].} # Ensure no exceptions can happen
+
 import
   system/ansi_c,
   std/atomics,
@@ -65,7 +67,6 @@ type
     buf: Atomic[ptr Buf[T]]
     garbage: ptr Buf[T]
 
-{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
 {.push overflowChecks: off.}       # We don't want exceptions (for Defect) in a multithreaded context
                                    # but we don't to deal with underflow of unsigned int either
                                    # say "if a < b - c" with c > b
@@ -192,4 +193,4 @@ proc steal*[T](deque: var ChaseLevDeque[T]): T =
       return default(T)
 
 {.pop.} # overflowChecks
-{.pop.} # raises: [AssertionDefect]
+{.pop.} # raises: []
