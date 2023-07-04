@@ -73,8 +73,6 @@ func trySend*[T](chan: var ChannelSPSCSingle, src: sink T): bool {.inline.} =
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
-  import system/ansi_c
-
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
@@ -142,6 +140,7 @@ when isMainModule:
     var threads: array[2, Thread[ThreadArgs]]
     var chan = tp_allocAligned(
       ChannelSPSCSingle[int], sizeof(ChannelSPSCSingle[int]), 64)
+    zeroMem(chan, sizeof(ChannelSPSCSingle[int]))
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
     createThread(threads[1], thread_func, ThreadArgs(ID: Sender, chan: chan))
