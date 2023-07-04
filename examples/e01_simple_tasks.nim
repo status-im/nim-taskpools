@@ -24,7 +24,7 @@ block: # Async/Await
   var tp: Taskpool
 
 
-  proc asyncFib(n: int): int {.gcsafe.} =
+  proc asyncFib(n: int): int {.gcsafe, raises: [].} =
     if n < 2:
       return n
 
