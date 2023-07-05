@@ -69,6 +69,7 @@ func trySend*[T](chan: var ChannelSPSCSingle, src: sink T): bool {.inline.} =
 
 {.pop.}
 
+{.pop.} # raises: []
 
 # Sanity checks
 # ------------------------------------------------------------------------------
