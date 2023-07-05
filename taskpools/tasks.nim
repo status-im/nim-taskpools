@@ -1,23 +1,20 @@
-#
-#
-#            Nim's Runtime Library
 #        (c) Copyright 2021 Nim contributors
-#
-#    See the file "copying.txt", included in this
-#    distribution, for details about the copyright.
-#
+# Copyright (c) 2023- Status Research & Development GmbH
 
 ## This module provides basic primitives for creating parallel programs.
 ## A `Task` should be only owned by a single Thread, it cannot be shared by threads.
+##
+## The module was forked from std/tasks in Nim 1.6 to add new functionality and
+## tune to the taskpools use case.
 
-import std/[macros, typetraits]
+import std/[macros, isolation, typetraits]
 import system/ansi_c
 
-import ./isolation
 export isolation
 
+
 when compileOption("threads"):
-  from ./effecttraits import isGcSafe
+  from std/effecttraits import isGcSafe
 
 
 #
@@ -56,18 +53,18 @@ when compileOption("threads"):
 # let t = Task(callback: hello_369098781, args: scratch_369098762, destroy: destroyScratch_369098782)
 #
 
+{.push raises: [].}
 
 type
   Task* = object ## `Task` contains the callback and its arguments.
-    callback: proc (args: pointer) {.nimcall, gcsafe.}
+    callback: proc (args: pointer) {.nimcall, gcsafe, raises: [].}
     args: pointer
-    destroy: proc (args: pointer) {.nimcall, gcsafe.}
+    destroy: proc (args: pointer) {.nimcall, gcsafe, raises: [].}
 
-# XXX: ⚠️ No destructors for 1.2 due to unreliable codegen
 
-# proc `=copy`*(x: var Task, y: Task) {.error.}
+proc `=copy`*(x: var Task, y: Task) {.error.}
 
-proc shim_destroy*(t: var Task) {.inline, gcsafe.} =
+proc `=destroy`*(t: var Task) {.inline, gcsafe.} =
   ## Frees the resources allocated for a `Task`.
   if t.args != nil:
     if t.destroy != nil:
@@ -86,14 +83,9 @@ template checkIsolate(scratchAssignList: seq[NimNode], procParam, scratchDotExpr
   #   var isoTempB = isolate(literal)
   #   scratch.b = extract(isolateB)
   let isolatedTemp = genSym(nskTemp, "isoTemp")
-
-  # XXX: Fix sym bindings
-  # scratchAssignList.add newVarStmt(isolatedTemp, newCall(newidentNode("isolate"), procParam))
-  # scratchAssignList.add newAssignment(scratchDotExpr,
-  #     newCall(newIdentNode("extract"), isolatedTemp))
-  scratchAssignList.add newVarStmt(isolatedTemp, newCall(bindSym("isolate"), procParam))
+  scratchAssignList.add newVarStmt(isolatedTemp, newCall(newIdentNode("isolate"), procParam))
   scratchAssignList.add newAssignment(scratchDotExpr,
-      newCall(bindSym("extract"), isolatedTemp))
+      newCall(newIdentNode("extract"), isolatedTemp))
 
 template addAllNode(assignParam: NimNode, procParam: NimNode) =
   let scratchDotExpr = newDotExpr(scratchIdent, formalParams[i][0])
@@ -115,16 +107,12 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
 
   doAssert getTypeInst(e).typeKind == ntyVoid
 
-  # requires 1.6
-  # when compileOption("threads"):
-  #   if not isGcSafe(e[0]):
-  #     error("'toTask' takes a GC safe call expression")
+  when compileOption("threads"):
+    if not isGcSafe(e[0]):
+      error("'toTask' takes a GC safe call expression", e)
 
-  # TODO
-  # https://github.com/nim-lang/Nim/pull/17501/files
-  #
-  # if hasClosure(e[0]):
-  #   error("closure call is not allowed")
+  if hasClosure(e[0]):
+    error("closure call is not allowed", e)
 
   if e.len > 1:
     let scratchIdent = genSym(kind = nskTemp, ident = "scratch")
@@ -151,17 +139,17 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
         param = param[0]
 
       if param.typeKind in {ntyExpr, ntyStmt}:
-        error("'toTask'ed function cannot have a 'typed' or 'untyped' parameter")
+        error("'toTask'ed function cannot have a 'typed' or 'untyped' parameter", e)
 
       case param.kind
       of nnkVarTy:
-        error("'toTask'ed function cannot have a 'var' parameter")
+        error("'toTask'ed function cannot have a 'var' parameter", e)
       of nnkBracketExpr:
         if param[0].typeKind == ntyTypeDesc:
           callNode.add nnkExprEqExpr.newTree(formalParams[i][0], e[i])
         elif param[0].typeKind in {ntyVarargs, ntyOpenArray}:
           if param[1].typeKind in {ntyExpr, ntyStmt}:
-            error("'toTask'ed function cannot have a 'typed' or 'untyped' parameter")
+            error("'toTask'ed function cannot have a 'typed' or 'untyped' parameter", e)
           let
             seqType = nnkBracketExpr.newTree(newIdentNode("seq"), param[1])
             seqCallNode = newCall("@", e[i])
@@ -177,7 +165,7 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
       of nnkCharLit..nnkNilLit:
         callNode.add nnkExprEqExpr.newTree(formalParams[i][0], e[i])
       else:
-        error("not supported type kinds")
+        error("'toTask'ed function cannot have a parameter of " & $param.kind & " kind", e)
 
     let scratchObjType = genSym(kind = nskType, ident = "ScratchObj")
     let scratchObj = nnkTypeSection.newTree(
@@ -203,9 +191,7 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
 
     let scratchCheck = quote do:
       if `scratchIdent`.isNil:
-        # Renamed in 1.4
-        # raise newException(OutOfMemDefect, "Could not allocate memory")
-        raise newException(OutOfMemError, "Could not allocate memory")
+        raise newException(OutOfMemDefect, "Could not allocate memory")
 
     var stmtList = newStmtList()
     stmtList.add(scratchObj)
@@ -222,21 +208,16 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
     let destroyName = genSym(nskProc, "destroyScratch")
     let objTemp2 = genSym(ident = "obj")
     let tempNode = quote("@") do:
-        # XXX:
-        # We avoid destructors for Nim 1.2 due to bad codegen
-        # For taskpool there are no destructor to run.
-        # We ensure that by checking that we only operate on plain old data
-        static: doAssert supportsCopyMem(@scratchObjType)
-        # `=destroy`(@objTemp2[])
+        `=destroy`(@objTemp2[])
 
     result = quote do:
       `stmtList`
 
-      proc `funcName`(args: pointer) {.gcsafe, nimcall.} =
+      proc `funcName`(args: pointer) {.gcsafe, nimcall, raises: [].} =
         let `objTemp` = cast[ptr `scratchObjType`](args)
         `functionStmtList`
 
-      proc `destroyName`(args: pointer) {.nimcall.} =
+      proc `destroyName`(args: pointer) {.gcsafe, nimcall, raises: [].} =
         let `objTemp2` = cast[ptr `scratchObjType`](args)
         `tempNode`
 
@@ -246,7 +227,7 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
     let funcName = genSym(nskProc, e[0].strVal)
 
     result = quote do:
-      proc `funcName`(args: pointer) {.gcsafe, nimcall.} =
+      proc `funcName`(args: pointer) {.gcsafe, nimcall, raises: [].} =
         `funcCall`
 
       Task(callback: `funcName`, args: nil)
@@ -254,7 +235,7 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
   when defined(nimTasksDebug):
     echo result.repr
 
-runnableExamples("--gc:orc"):
+when isMainModule:
   block:
     var num = 0
     proc hello(a: int) = inc num, a

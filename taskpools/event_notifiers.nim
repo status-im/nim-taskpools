@@ -1,5 +1,5 @@
 # Nim-Taskpools
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
@@ -22,6 +22,8 @@
 # but requires the threadpool to be message-passing based.
 # https://github.com/mratsim/weave/blob/a230cce98a8524b2680011e496ec17de3c1039f2/weave/cross_thread_com/event_notifiers.nim
 
+{.push raises: [].} # Ensure no exceptions can happen
+
 import
   std/locks,
   ./instrumentation/contracts
@@ -36,10 +38,6 @@ type
     parked: int
     signals: int
 
-when (NimMajor,NimMinor,NimPatch) <= (1,4,0):
-  type AssertionDefect = AssertionError
-
-{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
 {.push overflowChecks: off.}       # We don't want exceptions (for Defect) in a multithreaded context
                                    # but we don't to deal with underflow of unsigned int either
                                    # say "if a < b - c" with c > b

@@ -35,10 +35,7 @@
 # In case a thread is blocked for IO, other threads can steal pending tasks in that thread.
 # If all threads are pending for IO, the threadpool will not make any progress and be soft-locked.
 
-when (NimMajor,NimMinor,NimPatch) <= (1,4,0):
-  type AssertionDefect = AssertionError
-
-{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
+{.push raises: [].} # Ensure no exceptions can happen
 
 import
   system/ansi_c,
@@ -50,17 +47,13 @@ import
   ./instrumentation/[contracts, loggers],
   ./sparsesets,
   ./flowvars,
-  ./ast_utils
+  ./ast_utils,
+  ./tasks
 
 export
   # flowvars
-  Flowvar, isSpawned, isReady, sync
+  Flowvar, isSpawned, isReady, sync, tasks
 
-when (NimMajor,NimMinor,NimPatch) >= (1,6,0):
-  import std/[isolation, tasks]
-  export isolation
-else:
-  import ./shims_pre_1_6/tasks
 
 type
   WorkerID = int32
@@ -188,14 +181,11 @@ proc new(T: type TaskNode, parent: TaskNode, task: sink Task): T =
   tn.task = task
   return tn
 
-proc runTask(tn: var TaskNode) {.raises:[Exception], inline.} =
+proc runTask(tn: var TaskNode) {.raises:[], inline.} =
   ## Run a task and consumes the taskNode
   tn.task.invoke()
-  when (NimMajor,NimMinor,NimPatch) >= (1,6,0):
-    {.gcsafe.}: # Upstream missing tagging `=destroy` as gcsafe
-      tn.task.`=destroy`()
-  else:
-    tn.task.shim_destroy()
+  {.gcsafe.}: # Upstream missing tagging `=destroy` as gcsafe
+    tn.task.`=destroy`()
   tn.c_free()
 
 proc schedule(ctx: WorkerContext, tn: sink TaskNode) {.inline.} =
@@ -254,7 +244,7 @@ const RootTask = default(Task) # TODO: sentinel value different from null task
 template isRootTask(task: Task): bool =
   task == RootTask
 
-proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) {.raises:[Exception].} =
+proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) {.raises:[].} =
   ## Eagerly complete an awaited FlowVar
 
   template ctx: untyped = workerContext
@@ -445,11 +435,9 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
 
   # Package in a task
   let taskNode = ident("taskNode")
-  let task = ident("task")
   if not needFuture:
     result.add quote do:
-      let `task` = toTask(`fnCall`)
-      let `taskNode` = TaskNode.new(workerContext.currentTask, `task`)
+      let `taskNode` = TaskNode.new(workerContext.currentTask, toTask(`fnCall`))
       schedule(workerContext, `taskNode`)
 
   else:
@@ -512,8 +500,7 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
     asyncCall.add fut
 
     result.add quote do:
-      let `task` = toTask(`asyncCall`)
-      let `taskNode` = TaskNode.new(workerContext.currentTask, `task`)
+      let `taskNode` = TaskNode.new(workerContext.currentTask, toTask(`asyncCall`))
       schedule(workerContext, `taskNode`)
 
       # Return the future / flowvar
