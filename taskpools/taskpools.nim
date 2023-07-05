@@ -35,7 +35,7 @@
 # In case a thread is blocked for IO, other threads can steal pending tasks in that thread.
 # If all threads are pending for IO, the threadpool will not make any progress and be soft-locked.
 
-{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
+{.push raises: [].} # Ensure no exceptions can happen
 
 import
   system/ansi_c,
@@ -47,14 +47,13 @@ import
   ./instrumentation/[contracts, loggers],
   ./sparsesets,
   ./flowvars,
-  ./ast_utils
+  ./ast_utils,
+  ./tasks
 
 export
   # flowvars
-  Flowvar, isSpawned, isReady, sync
+  Flowvar, isSpawned, isReady, sync, tasks
 
-import std/[isolation, tasks]
-export isolation
 
 type
   WorkerID = int32
@@ -182,7 +181,7 @@ proc new(T: type TaskNode, parent: TaskNode, task: sink Task): T =
   tn.task = task
   return tn
 
-proc runTask(tn: var TaskNode) {.raises:[Exception], inline.} =
+proc runTask(tn: var TaskNode) {.raises:[], inline.} =
   ## Run a task and consumes the taskNode
   tn.task.invoke()
   {.gcsafe.}: # Upstream missing tagging `=destroy` as gcsafe
@@ -245,7 +244,7 @@ const RootTask = default(Task) # TODO: sentinel value different from null task
 template isRootTask(task: Task): bool =
   task == RootTask
 
-proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) {.raises:[Exception].} =
+proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) {.raises:[].} =
   ## Eagerly complete an awaited FlowVar
 
   template ctx: untyped = workerContext

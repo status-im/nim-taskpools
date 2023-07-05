@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   std/atomics,
   ./instrumentation/[contracts, loggers]
@@ -27,8 +29,6 @@ type
     full{.align: 64.}: Atomic[bool]
     itemSize*: uint8
     buffer*{.align: 8.}: UncheckedArray[byte]
-
-{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
 
 proc `=`(
     dest: var ChannelSPSCSingle,
@@ -78,7 +78,7 @@ func trySend*[T](chan: var ChannelSPSCSingle, src: sink T): bool {.inline.} =
   chan.full.store(true, moRelease)
   return true
 
-{.pop.} # raises: [AssertionDefect]
+{.pop.} # raises: []
 
 # Sanity checks
 # ------------------------------------------------------------------------------

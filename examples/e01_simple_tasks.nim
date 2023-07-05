@@ -3,8 +3,11 @@ import ../taskpools
 block: # Async without result
 
   proc displayInt(x: int) =
-    stdout.write(x)
-    stdout.write(" - SUCCESS\n")
+    try:
+      stdout.write(x)
+      stdout.write(" - SUCCESS\n")
+    except IOError:
+      quit 1 # can't do anything productive
 
   proc main() =
     echo "\nSanity check 1: Printing 123456 654321 in parallel"
@@ -21,7 +24,7 @@ block: # Async/Await
   var tp: Taskpool
 
 
-  proc asyncFib(n: int): int {.gcsafe.} =
+  proc asyncFib(n: int): int {.gcsafe, raises: [].} =
     if n < 2:
       return n
 

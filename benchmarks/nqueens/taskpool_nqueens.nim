@@ -88,10 +88,10 @@ func isValid(n: int32, a: CharArray): bool =
   ## Returns true if none of the queens conflict and 0 otherwise.
 
   for i in 0'i32 ..< n:
-    let p = cast[int32](a[i])
+    let p = int32(a[i])
 
     for j in i+1 ..< n:
-      let q = cast[int32](a[j])
+      let q = int32(a[j])
       if q == p or q == p - (j-i) or q == p + (j-i):
         return false
   return true
@@ -111,7 +111,7 @@ proc nqueens_ser(n, j: int32, a: CharArray): int32 =
     if isValid(j+1, a):
       result += nqueens_ser(n, j+1, a)
 
-proc nqueens_par(n, j: int32, a: CharArray): int32 {.gcsafe.} =
+proc nqueens_par(n, j: int32, a: CharArray): int32 {.gcsafe, raises: [].} =
 
   if n == j:
     # Good solution, count it
