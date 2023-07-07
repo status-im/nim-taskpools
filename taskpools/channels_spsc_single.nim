@@ -67,8 +67,6 @@ func trySend*[T](chan: var ChannelSPSCSingle, src: sink T): bool {.inline.} =
     chan.full.store(true, moRelease)
     true
 
-{.pop.}
-
 {.pop.} # raises: []
 
 # Sanity checks
