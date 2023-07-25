@@ -1,5 +1,6 @@
-# Weave
+# taskpools
 # Copyright (c) 2019 Mamy André-Ratsimbazafy
+# Copyright (c) 2021 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
@@ -12,8 +13,6 @@ import
   ./channels_spsc_single,
   ./primitives/allocs
 
-{.push gcsafe.}
-
 type
   Flowvar*[T] = object
     ## A Flowvar is a placeholder for a future result that may be computed in parallel
@@ -22,19 +21,19 @@ type
     # instead of having an extra atomic bool
     # They also use type-erasure to avoid having duplicate code
     # due to generic monomorphization.
-    chan: ptr ChannelSPSCSingle
+    chan: ptr ChannelSPSCSingle[T]
 
 # proc `=copy`*[T](dst: var Flowvar[T], src: Flowvar[T]) {.error: "Futures/Flowvars cannot be copied".}
 #
 # Unfortunately we cannot prevent this easily as internally
 # we need a copy:
-# - nim-taskpools level when doing toTask(fnCall(args, fut)) and then returning fut. (Can be worked around with copyMem)
+# - taskpools level when doing toTask(fnCall(args, fut)) and then returning fut. (Can be worked around with copyMem)
 # - in std/tasks (need upstream workaround)
 
 proc newFlowVar*(T: typedesc): Flowvar[T] {.inline.} =
-  let size = 2 + sizeof(T) # full flag + item size + buffer
-  result.chan = tp_allocAligned(ChannelSPSCSingle, size, alignment = 64)
-  result.chan[].initialize(sizeof(T))
+  result.chan = tp_allocAligned(
+    ChannelSPSCSingle[T], sizeof(ChannelSPSCSingle[T]), alignment = 64)
+  zeroMem(result.chan, sizeof(ChannelSPSCSingle[T]))
 
 proc cleanup(fv: Flowvar) {.inline.} =
   # TODO: Nim v1.4+ can use "sink Flowvar"
