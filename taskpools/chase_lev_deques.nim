@@ -85,7 +85,7 @@ proc newBuf(T: typedesc, capacity: int): ptr Buf[T] =
     zero = true
   )
 
-  # result.prevRetired = nil
+  result.prevRetired = nil
   result.capacity = capacity
   result.mask = capacity - 1
   # result.rawBuffer.addr.zeroMem(sizeof(T)*capacity)
