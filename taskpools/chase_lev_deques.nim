@@ -150,7 +150,7 @@ proc push*[T](deque: var ChaseLevDeque[T], item: T) =
     # Full queue
     deque.grow(a, t, b)
 
-  if not deque.garbage.isNil and b == t:
+  elif b-t == 0:
     # Empty queue, no thieves can have a pointer to an old retired buffer
     deque.garbageCollect()
 
