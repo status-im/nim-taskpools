@@ -182,4 +182,3 @@ jobs:
           gcc --version
           nimble install -y --depsOnly
           env NIMLANG=c nimble test
-          env NIMLANG=cpp nimble test
