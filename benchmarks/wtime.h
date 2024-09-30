@@ -28,6 +28,7 @@ static inline double Wtime_usec(void)
 	return tv.tv_sec * 1e6 + tv.tv_usec;
 }
 
+#if 0
 // Read time stamp counter on x86
 static inline unsigned long long readtsc(void)
 {
@@ -36,6 +37,7 @@ static inline unsigned long long readtsc(void)
 	asm volatile ("rdtsc" : "=a" (lo), "=d" (hi));
  	return (unsigned long long)hi << 32 | lo;
 }
+#endif
 
 #define WTIME_unique_var_name_paste(id, n) id ## n
 #define WTIME_unique_var_name(id, n) WTIME_unique_var_name_paste(id, n)
