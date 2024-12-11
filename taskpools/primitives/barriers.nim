@@ -17,7 +17,7 @@ when defined(windows):
   proc init*(syncBarrier: var SyncBarrier, threadCount: range[0'i32..high(int32)]) {.raises: [OSError].} =
     ## Initialize a synchronization barrier that will block ``threadCount`` threads
     ## before release.
-    if InitializeSynchronizationBarrier(syncBarrier, threadCount, -1) == 1:
+    if InitializeSynchronizationBarrier(syncBarrier, threadCount, -1) != 1:
       raiseOSError(osLastError())
 
   proc wait*(syncBarrier: var SyncBarrier): bool =
