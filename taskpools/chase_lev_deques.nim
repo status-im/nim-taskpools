@@ -1,4 +1,4 @@
-# Nim-Taskpools
+# taskpools
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
@@ -35,6 +35,8 @@
 # To reduce contention, stealing is done on the opposite end from push/pop
 # so that there is a race only for the very last task.
 
+{.push raises: [].} # Ensure no exceptions can happen
+
 import
   system/ansi_c,
   std/atomics,
@@ -65,10 +67,6 @@ type
     buf: Atomic[ptr Buf[T]]
     garbage: ptr Buf[T]
 
-when (NimMajor,NimMinor,NimPatch) <= (1,4,0):
-  type AssertionDefect = AssertionError
-
-{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
 {.push overflowChecks: off.}       # We don't want exceptions (for Defect) in a multithreaded context
                                    # but we don't to deal with underflow of unsigned int either
                                    # say "if a < b - c" with c > b
@@ -195,4 +193,4 @@ proc steal*[T](deque: var ChaseLevDeque[T]): T =
       return default(T)
 
 {.pop.} # overflowChecks
-{.pop.} # raises: [AssertionDefect]
+{.pop.} # raises: []

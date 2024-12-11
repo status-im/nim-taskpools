@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 # From fibril
 #
 # Original license
@@ -251,17 +253,21 @@ proc verify() =
 
   me /= nx * ny
 
-  if mae > 1e-12:
-    echo &"Local maximal absolute error {mae:1.3e}"
-    quit 1
-  if mre > 1e-12:
-    echo &"Local maximal relative error {mre:1.3e}"
-    quit 1
-  if me > 1e-12:
-    echo &"Global mean absolute error {me:1.3e}"
-    quit 1
+  try:
+    if mae > 1e-12:
+      echo &"Local maximal absolute error {mae:1.3e}"
+      quit 1
+    if mre > 1e-12:
+      echo &"Local maximal relative error {mre:1.3e}"
+      quit 1
+    if me > 1e-12:
+      echo &"Global mean absolute error {me:1.3e}"
+      quit 1
+  except ValueError: raiseAssert "format strings"
 
   echo "Verification successful"
+
+{.pop.}
 
 proc main() =
   var nthreads: int

@@ -65,7 +65,7 @@ proc bpc_consume_nopoll(usec: int32) =
 
     dummy_cpt()
 
-proc bpc_produce(n, d: int32) {.gcsafe.} =
+proc bpc_produce(n, d: int32) {.gcsafe, raises: [].} =
   if d > 0:
     # Create producer task
     tp.spawn bpc_produce(n, d-1)

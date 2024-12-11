@@ -81,7 +81,7 @@ macro assertContract(
       "N/A"
   let taskpoolID = quote do:
     when declared(workerContext):
-      "0x" & cast[ByteAddress](workerContext.taskpool).toHex().toLowerAscii()
+      "0x" & cast[uint](workerContext.taskpool).toHex().toLowerAscii()
     else:
       "N/A"
 
@@ -91,7 +91,7 @@ macro assertContract(
         assert(`predicate`, `debug` & $`values` & "  [Worker " & `workerID` & " on taskpool " & `taskpoolID` & "]\n")
       elif defined(TP_Asserts):
         if unlikely(not(`predicate`)):
-          raise newException(AssertionError, `debug` & $`values` & "  [Worker " & `workerID` & " on taskpool " & `taskpoolID` & "]\n")
+          raiseAssert(`debug` & $`values` & "  [Worker " & `workerID` & " on taskpool " & `taskpoolID` & "]\n")
 
 # A way way to get the caller function would be nice.
 

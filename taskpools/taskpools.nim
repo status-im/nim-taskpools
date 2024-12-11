@@ -1,4 +1,4 @@
-# Nim-Taskpools
+# taskpools
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
@@ -35,10 +35,7 @@
 # In case a thread is blocked for IO, other threads can steal pending tasks in that thread.
 # If all threads are pending for IO, the threadpool will not make any progress and be soft-locked.
 
-when (NimMajor,NimMinor,NimPatch) <= (1,4,0):
-  type AssertionDefect = AssertionError
-
-{.push raises: [AssertionDefect].} # Ensure no exceptions can happen
+{.push raises: [], gcsafe.} # Ensure no exceptions can happen
 
 import
   system/ansi_c,
@@ -50,17 +47,13 @@ import
   ./instrumentation/[contracts, loggers],
   ./sparsesets,
   ./flowvars,
-  ./ast_utils
+  ./ast_utils,
+  ./tasks
 
 export
   # flowvars
-  Flowvar, isSpawned, isReady, sync
+  Flowvar, isSpawned, isReady, sync, tasks
 
-when (NimMajor,NimMinor,NimPatch) >= (1,6,0):
-  import std/[isolation, tasks]
-  export isolation
-else:
-  import ./shims_pre_1_6/tasks
 
 type
   WorkerID = int32
@@ -147,10 +140,9 @@ proc teardownWorker() =
   ctx.taskDeque[].teardown()
   ctx.victims.delete()
 
-proc eventLoop(ctx: var WorkerContext) {.raises:[Exception].}
+proc eventLoop(ctx: var WorkerContext) {.raises:[].}
 
-proc workerEntryFn(params: tuple[taskpool: Taskpool, id: WorkerID])
-       {.raises: [Exception].} =
+proc workerEntryFn(params: tuple[taskpool: Taskpool, id: WorkerID]) =
   ## On the start of the threadpool workers will execute this
   ## until they receive a termination signal
   # We assume that thread_local variables start all at their binary zero value
@@ -188,14 +180,11 @@ proc new(T: type TaskNode, parent: TaskNode, task: sink Task): T =
   tn.task = task
   return tn
 
-proc runTask(tn: var TaskNode) {.raises:[Exception], inline.} =
+proc runTask(tn: var TaskNode) {.inline.} =
   ## Run a task and consumes the taskNode
   tn.task.invoke()
-  when (NimMajor,NimMinor,NimPatch) >= (1,6,0):
-    {.gcsafe.}: # Upstream missing tagging `=destroy` as gcsafe
-      tn.task.`=destroy`()
-  else:
-    tn.task.shim_destroy()
+  {.gcsafe.}: # Upstream missing tagging `=destroy` as gcsafe
+    tn.task.`=destroy`()
   tn.c_free()
 
 proc schedule(ctx: WorkerContext, tn: sink TaskNode) {.inline.} =
@@ -224,7 +213,7 @@ proc trySteal(ctx: var WorkerContext): TaskNode =
 
   return nil
 
-proc eventLoop(ctx: var WorkerContext) {.raises:[Exception].} =
+proc eventLoop(ctx: var WorkerContext) =
   ## Each worker thread executes this loop over and over.
   while not ctx.signal.terminate.load(moRelaxed):
     # 1. Pick from local deque
@@ -254,7 +243,7 @@ const RootTask = default(Task) # TODO: sentinel value different from null task
 template isRootTask(task: Task): bool =
   task == RootTask
 
-proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) {.raises:[Exception].} =
+proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
   ## Eagerly complete an awaited FlowVar
 
   template ctx: untyped = workerContext
@@ -299,7 +288,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) {.raises:[Exception].}
       # We don't park as there is no notif for task completion
       cpuRelax()
 
-proc syncAll*(tp: Taskpool) {.raises: [Exception].} =
+proc syncAll*(tp: Taskpool) =
   ## Blocks until all pending tasks are completed
   ## This MUST only be called from
   ## the root scope that created the taskpool
@@ -348,7 +337,7 @@ proc syncAll*(tp: Taskpool) {.raises: [Exception].} =
 # Runtime
 # ---------------------------------------------
 
-proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [Exception].} =
+proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [CatchableError].} =
   ## Initialize a threadpool that manages `numThreads` threads.
   ## Default to the number of logical processors available.
 
@@ -384,7 +373,7 @@ proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [Except
   discard tp.barrier.wait()
   return tp
 
-proc cleanup(tp: var Taskpool) {.raises: [AssertionDefect, OSError].} =
+proc cleanup(tp: var Taskpool) =
   ## Cleanup all resources allocated by the taskpool
   preCondition: workerContext.currentTask.task.isRootTask()
 
@@ -399,7 +388,7 @@ proc cleanup(tp: var Taskpool) {.raises: [AssertionDefect, OSError].} =
 
   tp.tp_freeAligned()
 
-proc shutdown*(tp: var Taskpool) {.raises:[Exception].} =
+proc shutdown*(tp: var Taskpool) =
   ## Wait until all tasks are processed and then shutdown the taskpool
   preCondition: workerContext.currentTask.task.isRootTask()
   tp.syncAll()
@@ -445,11 +434,9 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
 
   # Package in a task
   let taskNode = ident("taskNode")
-  let task = ident("task")
   if not needFuture:
     result.add quote do:
-      let `task` = toTask(`fnCall`)
-      let `taskNode` = TaskNode.new(workerContext.currentTask, `task`)
+      let `taskNode` = TaskNode.new(workerContext.currentTask, toTask(`fnCall`))
       schedule(workerContext, `taskNode`)
 
   else:
@@ -512,8 +499,7 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
     asyncCall.add fut
 
     result.add quote do:
-      let `task` = toTask(`asyncCall`)
-      let `taskNode` = TaskNode.new(workerContext.currentTask, `task`)
+      let `taskNode` = TaskNode.new(workerContext.currentTask, toTask(`asyncCall`))
       schedule(workerContext, `taskNode`)
 
       # Return the future / flowvar
