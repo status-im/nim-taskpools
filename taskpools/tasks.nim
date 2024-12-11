@@ -53,7 +53,7 @@ when compileOption("threads"):
 # let t = Task(callback: hello_369098781, args: scratch_369098762, destroy: destroyScratch_369098782)
 #
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 type
   Task* = object ## `Task` contains the callback and its arguments.
@@ -64,14 +64,14 @@ type
 
 proc `=copy`*(x: var Task, y: Task) {.error.}
 
-proc `=destroy`*(t: var Task) {.inline, gcsafe.} =
+proc `=destroy`*(t: var Task) {.inline.} =
   ## Frees the resources allocated for a `Task`.
   if t.args != nil:
     if t.destroy != nil:
       t.destroy(t.args)
     c_free(t.args)
 
-proc invoke*(task: Task) {.inline, gcsafe.} =
+proc invoke*(task: Task) {.inline.} =
   ## Invokes the `task`.
   assert task.callback != nil
   task.callback(task.args)
