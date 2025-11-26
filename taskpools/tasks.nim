@@ -199,6 +199,20 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
     stmtList.add(scratchCheck)
     stmtList.add(nnkBlockStmt.newTree(newEmptyNode(), newStmtList(scratchAssignList)))
 
+    when defined(gcRefc):
+      for i in 0 ..< formalParams.len:
+        if formalParams[i].kind == nnkEmpty:
+          continue
+        var param = formalParams[i][0]
+        if param.kind != nnkEmpty:
+          # `refc` uses a thread-local heap - therefore, anything heap-allocated
+          # cannot traverse thread boundaries, even if it's isolated - since
+          # tasks are likely to end up on a different thread, block their
+          # construction here.
+          stmtList.add quote do:
+            when not supportsCopyMem(typeof(`param`)):
+              {.error: "Garbage-collected types (seq, string, ref, closure) cannot be used as task arguments: " & $(typeof(`param`)).}
+
     var functionStmtList = newStmtList()
     let funcCall = newCall(e[0], callNode)
     functionStmtList.add tempAssignList
