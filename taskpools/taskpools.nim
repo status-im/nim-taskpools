@@ -480,15 +480,16 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
       else:
         # `move` to support move-only types in refc
         argsTup.add p
+        let hasClosure = newLit(p.kind == nnkSym and hasClosure(p))
         fwdCall.add quote do:
           # `refc` uses a thread-local heap - therefore, anything heap-allocated
           # cannot traverse thread boundaries, even if it's isolated - since
           # tasks are likely to end up on a different thread, block their
           # construction here.
-          when not supportsCopyMem(typeof(`p`)):
+          when (typeof(`p`) is (string|seq|ref)) or `hasClosure`:
             {.
               error:
-                "Garbage-collected types (seq, string, ref, closure) cannot be used as task arguments: " &
+                "Garbage-collected types (seq, string, ref, closures) cannot be used as task arguments: " &
                 $(typeof(`p`))
             .}
 
