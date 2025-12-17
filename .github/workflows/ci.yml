@@ -10,3 +10,5 @@ on:
 jobs:
   build:
     uses: status-im/nimbus-common-workflow/.github/workflows/common.yml@main
+    with:
+      nim-versions: '["version-2-0", "version-2-2", "devel"]'
