@@ -1,4 +1,4 @@
-import taskpools
+import ../taskpools
 
 var tp = Taskpool.new()
 
