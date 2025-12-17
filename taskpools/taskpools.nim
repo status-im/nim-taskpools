@@ -240,8 +240,8 @@ proc eventLoop(ctx: var WorkerContext) =
 proc RootTask(args: pointer) =
   discard
 
-template isRootTask(task: TaskCallback): bool =
-  task == RootTask
+template isRootTask(task: TaskNode): bool =
+  task.callback == RootTask
 
 proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
   ## Eagerly complete an awaited Flowvar
@@ -298,7 +298,7 @@ proc syncAll*(tp: Taskpool) =
     log(">>> Worker %2d enters barrier <<<\n", ctx.id)
 
   preCondition: ctx.id == 0
-  preCondition: ctx.currentTask.task.isRootTask()
+  preCondition: ctx.currentTask.isRootTask()
 
   # Empty all tasks
   var foreignThreadsParked = false
@@ -373,7 +373,7 @@ proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [Catcha
 
 proc cleanup(tp: var Taskpool) =
   ## Cleanup all resources allocated by the taskpool
-  preCondition: workerContext.currentTask.task.isRootTask()
+  preCondition: workerContext.currentTask.isRootTask()
 
   for i in 1 ..< tp.numThreads:
     joinThread(tp.workers[i])
@@ -388,7 +388,7 @@ proc cleanup(tp: var Taskpool) =
 
 proc shutdown*(tp: var Taskpool) =
   ## Wait until all tasks are processed and then shutdown the taskpool
-  preCondition: workerContext.currentTask.callback.isRootTask()
+  preCondition: workerContext.currentTask.isRootTask()
   tp.syncAll()
 
   # Signal termination to all threads
@@ -477,12 +477,24 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
           isolate(`p`)
         fwdCall.add quote do:
           extract(`env`[][`i`])
-      else:
+      elif defined(gcRefc):
         # `move` to support move-only types in refc
         argsTup.add p
         fwdCall.add quote do:
-          move(`env`[][`i`])
+          # `refc` uses a thread-local heap - therefore, anything heap-allocated
+          # cannot traverse thread boundaries, even if it's isolated - since
+          # tasks are likely to end up on a different thread, block their
+          # construction here.
+          when not supportsCopyMem(typeof(`p`)):
+            {.
+              error:
+                "Garbage-collected types (seq, string, ref, closure) cannot be used as task arguments: " &
+                $(typeof(`p`))
+            .}
 
+          move(`env`[][`i`])
+      else:
+        {.error: "Taskpools not implemented for the given memory manager".}
   let
     (fut, body) =
       if retType.kind != nnkEmpty:
@@ -522,19 +534,6 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
           type `argsTy` = typeof(`argsTup`)
           let `args` = createShared(`argsTy`)
           `args`[] = `argsTup`
-
-        when defined(gcRefc):
-          # `refc` uses a thread-local heap - therefore, anything heap-allocated
-          # cannot traverse thread boundaries, even if it's isolated - since
-          # tasks are likely to end up on a different thread, block their
-          # construction here.
-          result.add quote do:
-            when not supportsCopyMem(typeof(`param`)):
-              {.
-                error:
-                  "Garbage-collected types (seq, string, ref, closure) cannot be used as task arguments: " &
-                  $(typeof(`param`))
-              .}
 
         body.add quote do:
           wasMoved(`env`[])
