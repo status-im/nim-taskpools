@@ -39,7 +39,7 @@
 
 import
   system/ansi_c,
-  std/[atomics, cpuinfo, isolation, macros, random, sequtils, typetraits],
+  std/[atomics, cpuinfo, isolation, macros, random, typetraits],
   ./[
     ast_utils, channels_spsc_single, chase_lev_deques, event_notifiers, flowvars,
     sparsesets,
