@@ -43,6 +43,9 @@ task test, "Run Taskpools tests":
   run "", "benchmarks/heat/taskpool_heat.nim"
   run "", "benchmarks/nqueens/taskpool_nqueens.nim"
 
+  # Tests
+  run "", "tests/test_calltypes.nim"
+
   when not defined(windows):
     run "", "benchmarks/single_task_producer/taskpool_spc.nim"
     run "", "benchmarks/bouncing_producer_consumer/taskpool_bpc.nim"

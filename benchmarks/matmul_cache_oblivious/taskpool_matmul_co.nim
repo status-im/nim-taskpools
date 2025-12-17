@@ -124,7 +124,7 @@ proc matmul[T](A, B, C: Matrix[T], m, n, p: int, add: bool): bool =
 
     return
 
-  var h0, h1: FlowVar[bool]
+  var h0, h1: Flowvar[bool]
   ## Each half of the computation
 
   # matrix is larger than threshold

@@ -10,7 +10,7 @@ when not defined(windows):
 
 var tp: Taskpool
 
-proc fib(n: int): int =
+proc fib(n: int): int {.raises: [], gcsafe.} =
   # int64 on x86-64
   if n < 2:
     return n
