@@ -51,7 +51,7 @@ import
 
 export
   # flowvars
-  Flowvar, isSpawned, isReady, sync, tasks
+  Flowvar, isSpawned, isReady, sync, isolation
 
 
 type
