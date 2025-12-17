@@ -477,7 +477,7 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
           isolate(`p`)
         fwdCall.add quote do:
           extract(`env`[][`i`])
-      elif defined(gcRefc):
+      else:
         # `move` to support move-only types in refc
         argsTup.add p
         fwdCall.add quote do:
@@ -493,8 +493,6 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
             .}
 
           move(`env`[][`i`])
-      else:
-        {.error: "Taskpools not implemented for the given memory manager".}
   let
     (fut, body) =
       if retType.kind != nnkEmpty:
