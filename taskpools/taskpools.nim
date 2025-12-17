@@ -39,15 +39,13 @@
 
 import
   system/ansi_c,
-  std/[isolation, random, cpuinfo, atomics, macros, typetraits, effecttraits, sequtils],
-  ./channels_spsc_single,
-  ./chase_lev_deques,
-  ./event_notifiers,
+  std/[atomics, cpuinfo, isolation, macros, random, sequtils, typetraits],
+  ./[
+    ast_utils, channels_spsc_single, chase_lev_deques, event_notifiers, flowvars,
+    sparsesets,
+  ],
   ./primitives/[barriers, allocs],
-  ./instrumentation/[contracts, loggers],
-  ./sparsesets,
-  ./flowvars,
-  ./ast_utils
+  ./instrumentation/[contracts, loggers]
 
 export
   # flowvars
@@ -452,15 +450,6 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
   # * Flowvar for return value, if any
   #
   # Start with the runtime parameters:
-  proc isStatic(n: NimNode): bool =
-    case n.kind
-    of nnkLiterals:
-      true
-    of nnkTupleConstr, nnkObjConstr:
-      n.allIt(it.isStatic)
-    else:
-      false
-
   for i in 1 ..< fnCall.len:
     let p = fnCall[i]
     if isStatic(p):
