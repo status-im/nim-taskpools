@@ -53,7 +53,7 @@ func `=destroy`*(en: var EventNotifier) {.inline.} =
   en.cond.deinitCond()
   en.lock.deinitLock()
 
-func `=`*(dst: var EventNotifier, src: EventNotifier) {.error: "An event notifier cannot be copied".}
+func `=copy`*(dst: var EventNotifier, src: EventNotifier) {.error: "An event notifier cannot be copied".}
 func `=sink`*(dst: var EventNotifier, src: EventNotifier) {.error: "An event notifier cannot be moved".}
 
 proc park*(en: var EventNotifier) {.inline.} =

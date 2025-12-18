@@ -427,17 +427,11 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
     error("Closure calls cannot be spawned", fnCall)
 
   let
-    retType = fn.getImpl().params()[0]
-
-    envp = genSym(nskParam, "envp")
-
-    fnName = $fn
-    taskFn = genSym(nskProc, fnName & "_task")
     argsTup = nnkTupleConstr.newTree()
-    argsTy = genSym(nskType, "ArgsType")
-    env = genSym(nskTemp, "env") # closure environment
+      # Tuple for collecting function arguments and storage for return value
     fwdCall = nnkCall.newTree(fn)
       # same as fnCall, but with parameters forwarded from the closure environment
+    env = genSym(nskTemp, "env") # closure environment
 
   result = newStmtList()
 
@@ -484,6 +478,11 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
 
           move(`env`[][`i`])
   let
+    envp = genSym(nskParam, "envp")
+      # closure environment, untyped pointer version in `fwdCall`
+    retType = fn.getImpl().params()[0]
+    argsTy = genSym(nskType, "ArgsType")
+
     (fut, body) =
       if retType.kind != nnkEmpty:
         # if the call returns a value, create a `Flowvar` which can transfer
@@ -518,17 +517,24 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
       if argsTup.len > 0:
         let args = genSym(nskTemp, "args")
 
+        # Allocate the tuple that will hold the arguments that need to be passed
+        # to the task, potentially on a different thread
         result.add quote do:
           type `argsTy` = typeof(`argsTup`)
           let `args` = createShared(`argsTy`)
           `args`[] = `argsTup`
 
+        # ... and free it after the task has finished running - because we moved
+        # the values out of the environment when calling the function, there's
+        # nothing left to process
         body.add quote do:
           wasMoved(`env`[])
           freeShared(`env`)
         args
       else:
         newNilLit()
+    taskFn = genSym(nskProc, $fn & "_task")
+      # Function that calls `fn` inside within the taskpool thread
 
   result.add quote do:
     proc `taskFn`(`envp`: pointer) {.nimcall, gcsafe, raises: [].} =
