@@ -11,6 +11,7 @@ import ./[
   test_bpc,
   test_calltypes,
   test_dfs,
+  test_external_queue,
   test_fib,
   test_heat,
   test_nqueens,

@@ -44,6 +44,7 @@ proc runTests(args: string) =
   # Examples
   run args, "examples/e01_simple_tasks.nim"
   run args, "examples/e02_parallel_pi.nim"
+  run args, "examples/e03_external_threads.nim"
 
   # Tests
   run args, "tests/test_all.nim"

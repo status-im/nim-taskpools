@@ -64,9 +64,9 @@ func isReady*[T](fv: Flowvar[T]): bool {.inline.} =
   not fv.chan[].isEmpty()
 
 proc sync*[T](fv: sink Flowvar[T]): T {.inline, gcsafe.} =
-  ## Blocks the current thread until the flowvar is available
-  ## and returned.
-  ## The thread is not idle and will complete pending tasks.
+  ## Blocks the current thread until the flowvar is available and returned.
+  ## Worker threads help execute pending tasks while waiting.
+  ## Non-worker (external) threads busy-wait instead.
   mixin forceFuture
   forceFuture(fv, result)
   cleanup(fv)
