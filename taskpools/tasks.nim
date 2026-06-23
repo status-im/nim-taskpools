@@ -53,7 +53,7 @@ when compileOption("threads"):
 # let t = Task(callback: hello_369098781, args: scratch_369098762, destroy: destroyScratch_369098782)
 #
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 type
   Task* = object ## `Task` contains the callback and its arguments.
@@ -64,14 +64,14 @@ type
 
 proc `=copy`*(x: var Task, y: Task) {.error.}
 
-proc `=destroy`*(t: var Task) {.inline, gcsafe.} =
+proc `=destroy`*(t: var Task) {.inline.} =
   ## Frees the resources allocated for a `Task`.
   if t.args != nil:
     if t.destroy != nil:
       t.destroy(t.args)
     c_free(t.args)
 
-proc invoke*(task: Task) {.inline, gcsafe.} =
+proc invoke*(task: Task) {.inline.} =
   ## Invokes the `task`.
   assert task.callback != nil
   task.callback(task.args)
@@ -198,6 +198,20 @@ macro toTask*(e: typed{nkCall | nkInfix | nkPrefix | nkPostfix | nkCommand | nkC
     stmtList.add(scratchLetSection)
     stmtList.add(scratchCheck)
     stmtList.add(nnkBlockStmt.newTree(newEmptyNode(), newStmtList(scratchAssignList)))
+
+    when defined(gcRefc):
+      for i in 0 ..< formalParams.len:
+        if formalParams[i].kind == nnkEmpty:
+          continue
+        var param = formalParams[i][0]
+        if param.kind != nnkEmpty:
+          # `refc` uses a thread-local heap - therefore, anything heap-allocated
+          # cannot traverse thread boundaries, even if it's isolated - since
+          # tasks are likely to end up on a different thread, block their
+          # construction here.
+          stmtList.add quote do:
+            when not supportsCopyMem(typeof(`param`)):
+              {.error: "Garbage-collected types (seq, string, ref, closure) cannot be used as task arguments: " & $(typeof(`param`)).}
 
     var functionStmtList = newStmtList()
     let funcCall = newCall(e[0], callNode)

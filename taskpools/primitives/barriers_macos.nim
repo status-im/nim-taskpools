@@ -30,13 +30,6 @@ type
 const
   PTHREAD_BARRIER_SERIAL_THREAD* = Errno(1)
 
-proc pthread_cond_broadcast(cond: var Cond): Errno {.header:"<pthread.h>".}
-  ## Nim only signal one thread in locks
-  ## We need to unblock all
-
-proc broadcast(cond: var Cond) {.inline.}=
-  discard pthread_cond_broadcast(cond)
-
 func pthread_barrier_init*(
         barrier: var PthreadBarrier,
         attr: ptr PthreadBarrierAttr,

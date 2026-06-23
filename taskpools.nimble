@@ -1,7 +1,7 @@
 mode = ScriptMode.Verbose
 
 packageName   = "taskpools"
-version       = "0.0.5"
+version       = "0.1.0"
 author        = "Status Research & Development GmbH"
 description   = "lightweight, energy-efficient, easily auditable threadpool"
 license       = "MIT"
@@ -25,7 +25,9 @@ proc build(args, path: string) =
   exec nimc & " " & lang & " " & cfg & " " & flags & " " & args & " " & path
 
 proc run(args, path: string) =
-  build args & " -r", path
+  build args & " --mm:refc -r", path
+  if (NimMajor, NimMinor) > (1, 6):
+    build args & " --mm:orc -r", path
 
 task test, "Run Taskpools tests":
   # Internal data structures
