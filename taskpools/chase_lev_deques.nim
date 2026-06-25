@@ -116,6 +116,7 @@ proc grow[T](deque: var ChaseLevDeque[T], buf: var ptr Buf[T], top, bottom: int)
   # publish globally
   # moRelease for buf.load(moConsume) in steal
   deque.buf.store(tmp, moRelease)
+  # publish locally
   swap(buf, tmp)
 
 # Public API
