@@ -238,7 +238,7 @@ proc eventLoop(ctx: var WorkerContext) =
 proc RootTask(args: pointer) =
   discard
 
-template isRootTask(task: TaskNode): bool =
+template isRootTask(task: TaskNode): bool {.used.} =
   task.callback == RootTask
 
 proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
