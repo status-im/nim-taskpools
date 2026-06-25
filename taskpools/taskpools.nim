@@ -100,6 +100,21 @@ type
     workerSignals: ptr UncheckedArray[Signal]
       ## Access signaledTerminate
 
+proc supportsThreadMove*(T: type): bool {.compileTime.} =
+  # Similar to `supportsCopyMem` but allows types with disabled `=copy`. Not
+  # perfect.
+  when T is object | tuple:
+    for f in fields(cast[ptr T](0)[]):
+      if not supportsThreadMove(typeof(f)):
+        return false
+    true
+  elif T is distinct:
+    supportsThreadMove(distinctBase(T))
+  elif T is SomeOrdinal | pointer | ptr | cstring | char | float | float32 | float64:
+    true
+  else: # string | seq | ref | proc | iterator - last two are tricky
+    false
+
 # Thread-local config
 # ---------------------------------------------
 
@@ -444,6 +459,7 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
   # * Flowvar for return value, if any
   #
   # Start with the runtime parameters:
+  var j = 0
   for i in 1 ..< fnCall.len:
     let p = fnCall[i]
     if isStatic(p):
@@ -452,14 +468,15 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
     else:
       # Non-literals must be copied to shared memory - add them to a tuple
       # then extract them from the tuple on the calling side
-      let i = newLit(i - 1)
+      let jl = newLit(j)
+      j += 1
 
       when defined(gcOrc) or defined(gcArc):
         # In ORC, we can isolate values and move them between tasks
         argsTup.add quote do:
           isolate(`p`)
         fwdCall.add quote do:
-          extract(`env`[][`i`])
+          extract(`env`[][`jl`])
       else:
         # `move` to support move-only types in refc
         argsTup.add p
@@ -470,14 +487,14 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
         # tasks are likely to end up on a different thread, block their
         # construction here.
         fwdCall.add quote do:
-          when (typeof(`p`) is (string|seq|ref)) or `hasClosure`:
+          when `hasClosure` or not supportsThreadMove(typeof(`p`)):
             {.
               error:
                 "Garbage-collected types (seq, string, ref, closures) cannot be used as task arguments: " &
                 $(typeof(`p`))
             .}
 
-          move(`env`[][`i`])
+          move(`env`[][`jl`])
   let
     envp = genSym(nskParam, "envp")
       # closure environment, untyped pointer version in `fwdCall`
