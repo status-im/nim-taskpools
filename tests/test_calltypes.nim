@@ -48,3 +48,4 @@ proc test() =
 test()
 
 tp.syncAll()
+tp.shutdown()
