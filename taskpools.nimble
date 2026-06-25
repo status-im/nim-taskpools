@@ -9,6 +9,8 @@ skipDirs      = @["tests"]
 
 requires "nim >= 2.0.14"
 
+import strutils
+
 let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
 let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
 let flags = getEnv("NIMFLAGS", "") # Extra flags for the compiler
@@ -26,29 +28,37 @@ proc build(args, path: string) =
 
 proc run(args, path: string) =
   build args & " --mm:refc -r", path
-  if (NimMajor, NimMinor) > (1, 6):
-    build args & " --mm:orc -r", path
+  build args & " --mm:orc -r", path
 
-task test, "Run Taskpools tests":
+  if (NimMajor, NimMinor) >= (2, 2) and defined(linux) and defined(amd64) and "danger" in args:
+    build args & " --mm:orc -d:useMalloc --cc:clang --passc:-fsanitize=address --passl:-fsanitize=address --debugger:native -r", path
+    build args & " --mm:orc -d:useMalloc --cc:clang --passc:-fsanitize=thread --passl:-fsanitize=thread --debugger:native -r", path
+    build args & " --mm:refc --cc:clang --passc:-fsanitize=thread --passl:-fsanitize=thread --debugger:native -r", path
+
+proc runTests(args: string) =
   # Internal data structures
-  run "", "taskpools/channels_spsc_single.nim"
-  run "", "taskpools/sparsesets.nim"
+  run args, "taskpools/channels_spsc_single.nim"
+  run args, "taskpools/sparsesets.nim"
 
   # Examples
-  run "", "examples/e01_simple_tasks.nim"
-  run "", "examples/e02_parallel_pi.nim"
+  run args, "examples/e01_simple_tasks.nim"
+  run args, "examples/e02_parallel_pi.nim"
 
   # Benchmarks
-  run "", "benchmarks/dfs/taskpool_dfs.nim"
-  run "", "benchmarks/heat/taskpool_heat.nim"
-  run "", "benchmarks/nqueens/taskpool_nqueens.nim"
+  run args, "benchmarks/dfs/taskpool_dfs.nim"
+  run args, "benchmarks/heat/taskpool_heat.nim"
+  run args, "benchmarks/nqueens/taskpool_nqueens.nim"
 
   # Tests
-  run "", "tests/test_calltypes.nim"
+  run args, "tests/test_calltypes.nim"
 
   when not defined(windows):
-    run "", "benchmarks/single_task_producer/taskpool_spc.nim"
-    run "", "benchmarks/bouncing_producer_consumer/taskpool_bpc.nim"
+    run args, "benchmarks/single_task_producer/taskpool_spc.nim"
+    run args, "benchmarks/bouncing_producer_consumer/taskpool_bpc.nim"
 
   # TODO - generics in macro issue
-  # run "", "benchmarks/matmul_cache_oblivious/taskpool_matmul_co.nim"
+  # run args, "benchmarks/matmul_cache_oblivious/taskpool_matmul_co.nim"
+
+task test, "Run Taskpools tests":
+  for mode in ["", "-d:release", "-d:danger"]:
+    runTests(mode)

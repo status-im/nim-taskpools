@@ -114,8 +114,8 @@ proc grow[T](deque: var ChaseLevDeque[T], buf: var ptr Buf[T], top, bottom: int)
   buf.prev = deque.garbage
   deque.garbage = buf
   # publish globally
-  deque.buf.store(tmp, moRelaxed)
-  # publish locally
+  # moRelease for buf.load(moConsume) in steal
+  deque.buf.store(tmp, moRelease)
   swap(buf, tmp)
 
 # Public API
@@ -149,8 +149,7 @@ proc push*[T](deque: var ChaseLevDeque[T], item: T) =
     deque.grow(a, t, b)
 
   a[][b] = item
-  fence(moRelease)
-  deque.bottom.store(b+1, moRelaxed)
+  deque.bottom.store(b+1, moRelease)
 
 proc pop*[T](deque: var ChaseLevDeque[T]): T =
   ## Deque an item at the bottom
