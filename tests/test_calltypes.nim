@@ -34,6 +34,12 @@ proc argtuple(v: (int, int)) =
 
 tp.spawn(argtuple((1, 2)))
 
+proc argumulti(b: bool, v: array[2, int], p: ptr int) =
+  discard
+
+var varray: array[2, int]
+tp.spawn(argumulti(false, varray, nil))
+
 type MoveOnly = object
 
 proc `=copy`(a: var MoveOnly, b: MoveOnly) {.error.}

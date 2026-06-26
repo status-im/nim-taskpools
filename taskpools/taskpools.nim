@@ -51,6 +51,7 @@ export
   # flowvars
   Flowvar, isSpawned, isReady, sync, isolation
 
+const sharedHeap = defined(gcArc) or defined(gcOrc) or defined(gcAtomicArc)
 
 type
   WorkerID = int32
@@ -100,20 +101,24 @@ type
     workerSignals: ptr UncheckedArray[Signal]
       ## Access signaledTerminate
 
-proc supportsThreadMove*(T: type): bool {.compileTime.} =
-  # Similar to `supportsCopyMem` but allows types with disabled `=copy`. Not
-  # perfect.
-  when T is object | tuple:
-    for f in fields(cast[ptr T](0)[]):
-      if not supportsThreadMove(typeof(f)):
-        return false
-    true
-  elif T is distinct:
-    supportsThreadMove(distinctBase(T))
-  elif T is SomeOrdinal | pointer | ptr | cstring | char | float | float32 | float64:
-    true
-  else: # string | seq | ref | proc | iterator - last two are tricky
-    false
+when not sharedHeap:
+  proc supportsThreadMove*(T: type): bool {.compileTime.} =
+    # Similar to `supportsCopyMem` but allows types with disabled `=copy`. Not
+    # perfect - in particular, doesn't allow `proc (...) {.nimcall.}`
+    when T is object | tuple:
+      for f in fields(cast[ptr T](0)[]):
+        if not supportsThreadMove(typeof(f)):
+          return false
+      true
+    elif T is distinct:
+      supportsThreadMove(distinctBase(T))
+    elif T is array:
+      supportsThreadMove(elementType(cast[ptr T](0)[]))
+    elif T is
+        SomeOrdinal | pointer | ptr | cstring | char | float | float32 | float64 | set:
+      true
+    else: # string | seq | ref | proc | iterator - last two are tricky
+      false
 
 # Thread-local config
 # ---------------------------------------------
@@ -471,7 +476,7 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
       let jl = newLit(j)
       j += 1
 
-      when defined(gcOrc) or defined(gcArc):
+      when sharedHeap:
         # In ORC, we can isolate values and move them between tasks
         argsTup.add quote do:
           isolate(`p`)
