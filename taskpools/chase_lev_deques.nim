@@ -151,6 +151,9 @@ proc push*[T](deque: var ChaseLevDeque[T], item: T) =
 
   a[][b] = item
   when defined(taskpoolsTsan):
+    # TSan does not support atomic_thread_fence, see:
+    # https://github.com/llvm/llvm-project/issues/52942
+    # https://github.com/google/sanitizers/issues/1352
     deque.bottom.store(b+1, moRelease)
   else:
     fence(moRelease)
