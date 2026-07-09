@@ -33,8 +33,8 @@ proc run(args, path: string) =
   if (NimMajor, NimMinor) >= (2, 2) and defined(linux) and defined(amd64) and "danger" in args:
     build args & " --mm:arc -d:useMalloc --cc:clang --passc:-fsanitize=address --passl:-fsanitize=address --debugger:native -r", path
     build args & " --mm:orc -d:useMalloc --cc:clang --passc:-fsanitize=address --passl:-fsanitize=address --debugger:native -r", path
-    build args & " --mm:orc -d:useMalloc --cc:clang --passc:-fsanitize=thread --passl:-fsanitize=thread --debugger:native -r", path
-    build args & " --mm:refc --cc:clang --passc:-fsanitize=thread --passl:-fsanitize=thread --debugger:native -r", path
+    build args & " --mm:orc -d:taskpoolsTsan -d:useMalloc --cc:clang --passc:-fsanitize=thread --passl:-fsanitize=thread --debugger:native -r", path
+    build args & " --mm:refc -d:taskpoolsTsan --cc:clang --passc:-fsanitize=thread --passl:-fsanitize=thread --debugger:native -r", path
 
 proc runTests(args: string) =
   # Internal data structures

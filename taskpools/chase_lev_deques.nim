@@ -150,7 +150,11 @@ proc push*[T](deque: var ChaseLevDeque[T], item: T) =
     deque.grow(a, t, b)
 
   a[][b] = item
-  deque.bottom.store(b+1, moRelease)
+  when defined(taskpoolsTsan):
+    deque.bottom.store(b+1, moRelease)
+  else:
+    fence(moRelease)
+    deque.bottom.store(b+1, moRelaxed)
 
 proc pop*[T](deque: var ChaseLevDeque[T]): T =
   ## Deque an item at the bottom

@@ -124,6 +124,10 @@ The following types and procedures are exposed:
       ## The thread is not idle and will complete pending tasks.
     ```
 
+## Compile flags
+
+- `taskpoolsTsan`: Enable ThreadSanitizer (TSan) support. Example command: `nim c --mm:orc -d:taskpoolsTsan -d:useMalloc -d:release --cc:clang --passc:-fsanitize=thread --passl:-fsanitize=thread --debugger:native -r ./my_app.nim`
+
 ### Non-goals
 
 The following are non-goals:
