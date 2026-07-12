@@ -98,6 +98,27 @@ proc `[]=`[T](buf: var Buf[T], index: int, item: T) {.inline.} =
 proc `[]`[T](buf: var Buf[T], index: int): T {.inline.} =
   result = buf.rawBuffer[index and buf.mask].load(moRelaxed)
 
+proc peek*[T](deque: var ChaseLevDeque[T]): int =
+  ## Estimates the number of items pending in the deque.
+  ## In a single-producer multi-consumer setting:
+  ## - If called by the producer (owner) the true number might be less
+  ##   due to consumers stealing items concurrently.
+  ## - If called by a consumer the true number is undefined
+  ##   as other consumers also steal items concurrently and
+  ##   the producer pushes/pops them concurrently.
+  ##
+  ## If the producer peeks and this returns 0, the queue is empty.
+  ##
+  ## This is a non-locking operation.
+  let # Handle race conditions
+    b = deque.bottom.load(moRelaxed)  # Only the producer peeks in the taskpool so moRelaxed is enough
+    t = deque.top.load(moAcquire)
+
+  if b >= t:
+    return b-t
+  else:
+    return 0
+
 proc grow[T](deque: var ChaseLevDeque[T], buf: var ptr Buf[T], top, bottom: int) {.inline.} =
   ## Double the buffer size
   ## bottom is the last item index

@@ -55,6 +55,7 @@ task test, "Run tests":
 
 proc runBenchs(args: string) =
   run args, "benchmarks/dfs/taskpool_dfs.nim"
+  # run args, "benchmarks/fibonacci/taskpool_fib.nim"
   run args, "benchmarks/heat/taskpool_heat.nim"
   run args, "benchmarks/nqueens/taskpool_nqueens.nim"
   run args, "benchmarks/iqs_latency/taskpool_iqs_latency.nim"

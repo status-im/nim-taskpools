@@ -41,7 +41,7 @@ import
   system/ansi_c,
   std/[atomics, cpuinfo, isolation, macros, random, typetraits],
   ./[
-    ast_utils, channels_spsc_single, chase_lev_deques, event_notifiers, flowvars,
+    ast_utils, backoff, chase_lev_deques, flowvars,
     injection_queues, sparsesets,
   ],
   ./primitives/[barriers, allocs],
@@ -80,7 +80,6 @@ type
     currentTask: TaskNode
 
     # Synchronization
-    eventNotifier: ptr EventNotifier # shared event notifier
     signal: ptr Signal               # owned signal
 
     # Thefts
@@ -90,13 +89,13 @@ type
 
   Taskpool* = ptr object
     ## A taskpool schedules procedures to be executed in parallel
-    barrier: SyncBarrier
+    barrier {.align: 64.}: SyncBarrier
       ## Barrier for initialization and teardown
     # --- Align: 64
-    eventNotifier: EventNotifier
-      ## Puts thread to sleep
-
-    numThreads*{.align: 64.}: int
+    globalBackoff {.align: 64.}: EventCount
+      ## Multi-producer multi-consumer backoff
+    # --- Align: 64
+    numThreads* {.align: 64.}: int
     workerDeques: ptr UncheckedArray[ChaseLevDeque[TaskNode]]
       ## Direct access for task stealing
     workers: ptr UncheckedArray[Thread[(Taskpool, WorkerID)]]
@@ -148,7 +147,6 @@ proc setupWorker() =
   ctx.victims.allocate(ctx.taskpool.numThreads)
 
   # Synchronization
-  ctx.eventNotifier = addr ctx.taskpool.eventNotifier
   ctx.signal = addr ctx.taskpool.workerSignals[ctx.id]
   ctx.signal.terminate.store(false, moRelaxed)
 
@@ -210,30 +208,33 @@ proc runTask(tn: var TaskNode) {.inline.} =
   tn.callback(tn.args)
   tn.tp_free()
 
-proc schedule(ctx: WorkerContext, tn: sink TaskNode) {.inline.} =
-  ## Schedule a task in the taskpool
+proc schedule(ctx: WorkerContext, tn: sink TaskNode, forceWake = false) {.inline.} =
+  ## Schedule a task in the taskpool.
+  ## This wakes another worker if our local queue is empty
+  ## or forceWake is true.
   debug: log("Worker %2d: schedule task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, tn, tn.parent, ctx.currentTask)
+
+  # Instead of notifying every time a task is scheduled, we notify
+  # only when the worker queue is empty. This is a good approximation
+  # of starvation in work-stealing.
+  let wasEmpty = ctx.taskDeque[].peek() == 0
   ctx.taskDeque[].push(tn)
-  ctx.taskpool.eventNotifier.notify()
+  if forceWake or wasEmpty:
+    ctx.taskpool.globalBackoff.wake()
 
 proc submitTask(tp: Taskpool, tn: TaskNode) {.inline.} =
   ## Push a task onto the injection queue from any thread.
   ## Workers will drain the queue into their Chase-Lev deques, making tasks stealable.
   tp.injectionQueue.push(tn)
-  tp.eventNotifier.notify()
+  # XXX wake when injectionQueue was empty
+  tp.globalBackoff.wake()
 
 proc drainInjectionQueue(ctx: var WorkerContext) {.inline.} =
   ## Atomically claim the entire injection queue and push all tasks into
   ## the calling worker's Chase-Lev deque, where they become stealable.
   ## Only one worker wins the exchange; the others drain nothing.
-  var count = 0
   for node in ctx.taskpool.injectionQueue.drain():
     ctx.taskDeque[].push(node)
-    inc count
-  # Wake workers so the newly stealable tasks get parallel attention.
-  let toWake = min(count, ctx.taskpool.eventNotifier.getParked())
-  for _ in 0 ..< toWake:
-    ctx.taskpool.eventNotifier.notify()
 
 # Scheduler
 # ---------------------------------------------
@@ -257,7 +258,7 @@ proc trySteal(ctx: var WorkerContext): TaskNode =
 
 proc eventLoop(ctx: var WorkerContext) =
   ## Each worker thread executes this loop over and over.
-  while not ctx.signal.terminate.load(moRelaxed):
+  while true:
     # 1. Pick from local deque
     debug: log("Worker %2d: eventLoop 1 - searching task from local deque\n", ctx.id)
     var processed = 0'u32
@@ -269,30 +270,40 @@ proc eventLoop(ctx: var WorkerContext) =
         processed = 0
         ctx.drainInjectionQueue()
 
+    let ticket = ctx.taskpool.globalBackoff.sleepy()
+
     # 2. Drain the injection queue into our Chase-Lev deque so externally submitted
     #    tasks become local work (and stealable by other workers).
     ctx.drainInjectionQueue()
 
     # 3. Re-check local deque; it may now contain injected tasks.
-    var taskNode = ctx.taskDeque[].pop()
-    if not taskNode.isNil:
+    if (var taskNode = ctx.taskDeque[].pop(); not taskNode.isNil):
       debug: log("Worker %2d: eventLoop 3 - running injected task 0x%.08x\n", ctx.id, taskNode)
+      ctx.taskpool.globalBackoff.cancelSleep()
+      ctx.taskpool.globalBackoff.wake()
       taskNode.runTask()
-      continue # back to step 1
-
-    # 4. Run out of tasks, become a thief
-    debug: log("Worker %2d: eventLoop 4 - becoming a thief\n", ctx.id)
-    var stolenTask = ctx.trySteal()
-    if not stolenTask.isNil:
+    elif (var stolenTask = ctx.trySteal(); not stolenTask.isNil):
       # 4.a Run stolen task
       debug: log("Worker %2d: eventLoop 4.a - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, stolenTask, stolenTask.parent, ctx.currentTask)
+      # We managed to steal a task, cancel sleep
+      ctx.taskpool.globalBackoff.cancelSleep()
+      # Theft successful, there might be more work for idle threads, wake one
+      # cancelSleep must be done before as wake has an optimization
+      # to not notify when a thread is sleepy
+      ctx.taskpool.globalBackoff.wake()
+      # 2.a Run task
+      debug: log("Worker %2d: eventLoop 2.a - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, stolenTask, stolenTask.parent, ctx.currentTask)
       stolenTask.runTask()
+    elif ctx.signal.terminate.load(moAcquire):
+      # 2.b Taskpool has no more tasks and we were signaled to terminate
+      ctx.taskpool.globalBackoff.cancelSleep()
+      debug: log("Worker %2d: eventLoop 2.b - terminated\n", ctx.id)
+      break
     else:
-      # 4.b Park the thread until a new task enters the taskpool.
-      #     submitTask calls notify() so parked workers wake when work arrives.
-      debug: log("Worker %2d: eventLoop 4.b - sleeping\n", ctx.id)
-      ctx.eventNotifier[].park()
-      debug: log("Worker %2d: eventLoop 4.b - waking\n", ctx.id)
+      # 2.c Park the thread until a new task enters the taskpool
+      debug: log("Worker %2d: eventLoop 2.c - sleeping\n", ctx.id)
+      ctx.taskpool.globalBackoff.sleep(ticket)
+      debug: log("Worker %2d: eventLoop 2.c - waking\n", ctx.id)
 
 # Tasking
 # ---------------------------------------------
@@ -309,7 +320,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
   template ctx: untyped = workerContext
 
   template isFutReady(): untyped =
-    fv.chan[].tryRecv(parentResult)
+    fv.tryComplete(parentResult)
 
   if isFutReady():
     return
@@ -327,7 +338,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
   while (var taskNode = ctx.taskDeque[].pop(); not taskNode.isNil):
     if taskNode.parent != ctx.currentTask:
       debug: log("Worker %2d: sync 1 - skipping non-direct descendant task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
-      ctx.schedule(taskNode)
+      ctx.schedule(taskNode, forceWake = true) # reschedule task and wake a sibling to take it over.
       break
     debug: log("Worker %2d: sync 1 - running task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
     taskNode.runTask()
@@ -344,6 +355,8 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
     var taskNode = ctx.trySteal()
 
     if not taskNode.isNil:
+      # Theft successful, there might be more work for idle threads, wake one
+      ctx.taskpool.globalBackoff.wake()
       # We stole some task, we hope we advance our awaited task
       debug: log("Worker %2d: sync 2.1 - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
       taskNode.runTask()
@@ -372,8 +385,7 @@ proc syncAll*(tp: Taskpool) =
   preCondition: ctx.currentTask.isRootTask()
 
   # Empty all tasks
-  var foreignThreadsParked = false
-  while not foreignThreadsParked:
+  while true:
     # 1. Empty local tasks
     debug: log("Worker %2d: syncAll 1 - searching task from local deque\n", ctx.id)
     while (var taskNode = ctx.taskDeque[].pop(); not taskNode.isNil):
@@ -387,30 +399,28 @@ proc syncAll*(tp: Taskpool) =
     # 3. Re-check local deque; it may now contain injected tasks.
     if (var taskNode = ctx.taskDeque[].pop(); not taskNode.isNil):
       debug: log("Worker %2d: syncAll 3 - running injected task 0x%.08x\n", ctx.id, taskNode)
+      ctx.taskpool.globalBackoff.wake()
       taskNode.runTask()
       continue # back to step 1
 
-    if tp.numThreads == 1 or foreignThreadsParked:
-      break
+    # 2. Help other threads
+    debug: log("Worker %2d: syncAll 2 - becoming a thief\n", ctx.id)
 
-    # 4. Help other threads
-    debug: log("Worker %2d: syncAll 4 - becoming a thief\n", ctx.id)
-    var taskNode = ctx.trySteal()
-
-    if not taskNode.isNil:
-      # 4.1 We stole some task
-      debug: log("Worker %2d: syncAll 4.1 - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
+    if (var taskNode = ctx.trySteal(); not taskNode.isNil):
+      # 2.a We stole some task
+      debug: log("Worker %2d: syncAll 2.a - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
+      # Theft successful, there might be more work for idle threads, wake one
+      ctx.taskpool.globalBackoff.wake()
       taskNode.runTask()
+    elif tp.globalBackoff.getNumWaiters() == (0'i32, int32(tp.numThreads - 1)):
+      # 2.b all threads besides the current are parked (and none are
+      #     in pre-sleep, so none can still grab a task and create work)
+      debugTermination:
+        log("Worker %2d: syncAll 2.b - termination, all other threads sleeping\n", ctx.id)
+      break
     else:
-      # 4.2 No task to steal
-      if tp.eventNotifier.getParked() == tp.numThreads - 1:
-        # 4.2.1 all threads besides the current are parked
-        debugTermination:
-          log("Worker %2d: syncAll 4.2.1 - termination, all other threads sleeping\n", ctx.id)
-        foreignThreadsParked = true
-      else:
-        # 4.2.2 We don't park as there is no notif for task completion
-        cpuRelax()
+      # 2.c We don't park as there is no notif for task completion
+      cpuRelax()
 
   debugTermination:
     log(">>> Worker %2d leaves barrier <<<\n", ctx.id)
@@ -427,7 +437,7 @@ proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [Catcha
   var tp = tp_allocAligned(TpObj, sizeof(TpObj) + 64, 64)
 
   tp.barrier.init(numThreads.int32)
-  tp.eventNotifier.initialize()
+  tp.globalBackoff.initialize()
   tp.numThreads = numThreads
   tp.injectionQueue.init()
   tp.workerDeques = tp_allocArrayAligned(ChaseLevDeque[TaskNode], numThreads, alignment = 64)
@@ -463,7 +473,7 @@ proc cleanup(tp: var Taskpool) =
   tp.workerSignals.tp_freeAligned()
   tp.workers.tp_freeAligned()
   tp.workerDeques.tp_freeAligned()
-  `=destroy`(tp.eventNotifier)
+  `=destroy`(tp.globalBackoff)
   tp.barrier.delete()
 
   tp.tp_freeAligned()
@@ -475,11 +485,9 @@ proc shutdown*(tp: var Taskpool) =
 
   # Signal termination to all threads
   for i in 0 ..< tp.numThreads:
-    tp.workerSignals[i].terminate.store(true, moRelaxed)
+    tp.workerSignals[i].terminate.store(true, moRelease)
 
-  let parked = tp.eventNotifier.getParked()
-  for i in 0 ..< parked:
-    tp.eventNotifier.notify()
+  tp.globalBackoff.wakeAll()
 
   # 1 matching barrier in worker_entry_fn
   discard tp.barrier.wait()
