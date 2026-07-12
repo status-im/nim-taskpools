@@ -9,6 +9,7 @@
 
 import
   unittest2,
+  ./utils,
   ../taskpools
 
 proc nothing() =
@@ -28,6 +29,9 @@ proc arggen*[T](v: T): int =
 
 proc argtuple(v: (int, int)) =
   discard
+
+proc argstr(s: string): int =
+  s.len
 
 proc argumulti(b: bool, v: array[2, int], p: ptr int) =
   discard
@@ -76,3 +80,16 @@ suite "Call types":
   test "move-only argument":
     var v: MoveOnly
     tp.spawn(moveit(v))
+
+  when supportsGcTypes:
+    test "string argument":
+      var futs: seq[Flowvar[int]]
+      var expected = 0
+      for i in 0 ..< 64:
+        let s = "item" & $i
+        expected += s.len
+        futs.add tp.spawn(argstr(s))
+      var total = 0
+      for i in 0 ..< 64:
+        total += sync futs[i]
+      check total == expected

@@ -7,6 +7,8 @@
 
 import std/[monotimes, times, cpuinfo]
 
+const supportsGcTypes* = defined(gcArc) or defined(gcOrc) or defined(gcAtomicArc)
+
 template withGranularity*(x: int32, body: untyped): untyped =
   ## Runs `body` in a loop for at least `x` microseconds.
   let start = getMonoTime()

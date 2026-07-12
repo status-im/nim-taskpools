@@ -9,59 +9,97 @@
 {.push raises: [].}
 
 import
-  ./instrumentation/contracts,
-  ./channels_spsc_single,
+  std/atomics,
   ./primitives/allocs
 
+# Tasks have an efficient design so that a single heap allocation
+# is required per `spawn`.
+# This greatly reduce overhead and potential memory fragmentation for long-running applications.
+#
+# This is done by tasks:
+# - being an intrusive linked lists
+# - integrating the channel to send results
+#
+# Flowvar is the public type created when spawning a task.
+# and can be synced to receive the task result.
+# Flowvars are also called future interchangeably.
+
 type
+  TaskCallback* = proc(env: pointer) {.nimcall, gcsafe, raises: [].}
+
+  TaskNode* = ptr object
+    # Linked list of tasks
+    parent*: TaskNode
+    # Intrusive link for the InjectionQueue Treiber stack
+    injectionNext*: TaskNode
+    callback*: TaskCallback
+    completed: Atomic[bool] # Readiness flag for an awaiting Flowvar
+    hasFuture*: bool # Ownership: if true the awaiter frees the node, otherwise the runner frees it once run.
+    env*{.align: sizeof(int).}: UncheckedArray[byte]
+
   Flowvar*[T] = object
-    ## A Flowvar is a placeholder for a future result that may be computed in parallel
-    # Flowvar are optimized when containing a ptr type.
-    # They take less size in memory by testing isNil
-    # instead of having an extra atomic bool
-    # They also use type-erasure to avoid having duplicate code
-    # due to generic monomorphization.
-    chan: ptr ChannelSPSCSingle[T]
+    ## A Flowvar is a placeholder for a future result that may be computed in parallel.
+    # A Flowvar merely references the intrusive task node that carries the
+    # result. It is kept a single pointer wide so it can be tested with `isNil`
+    # and stored cheaply in collections.
+    node: TaskNode
+
+# TaskNode
+# ------------------------------------------------------------------------------
+
+proc new*(T: type TaskNode, parent: TaskNode, callback: TaskCallback, envSize: int): T =
+  var tn = tp_allocUnchecked(deref(T), sizeof(deref(T)) + envSize, zero = true)
+  tn.parent = parent
+  tn.callback = callback
+  tn.completed.store(false, moRelaxed)
+  tn.hasFuture = false
+  tn
+
+proc setCompleted*(node: TaskNode) {.inline.} =
+  ## Mark a task as complete, transferring its result to any awaiting Flowvar.
+  node.completed.store(true, moRelease)
+
+# Flowvars
+# ------------------------------------------------------------------------------
 
 # proc `=copy`*[T](dst: var Flowvar[T], src: Flowvar[T]) {.error: "Futures/Flowvars cannot be copied".}
 #
 # Unfortunately we cannot prevent this easily as internally
 # we need a copy:
-# - taskpools level when doing toTask(fnCall(args, fut)) and then returning fut. (Can be worked around with copyMem)
-# - in std/tasks (need upstream workaround)
+# - taskpools level when returning the flowvar from the spawn macro
+# - when storing flowvars in collections (seq/array)
 
-proc newFlowVar*(T: typedesc): Flowvar[T] {.inline.} =
-  result.chan = tp_allocAligned(
-    ChannelSPSCSingle[T], sizeof(ChannelSPSCSingle[T]), alignment = 64)
-  zeroMem(result.chan, sizeof(ChannelSPSCSingle[T]))
+proc newFlowVar*(T: typedesc, node: TaskNode): Flowvar[T] {.inline.} =
+  ## Create a Flowvar referencing `node`. Must be called before the node is
+  ## scheduled so a thread running the task hands ownership to the awaiter.
+  result.node = node
+  node.hasFuture = true
 
-proc cleanup(fv: Flowvar) {.inline.} =
-  # TODO: Nim v1.4+ can use "sink Flowvar"
-  if not fv.chan.isNil:
-    tp_freeAligned(fv.chan)
+proc cleanup*(fv: Flowvar) {.inline.} =
+  if not fv.node.isNil:
+    tp_free(fv.node)
 
 func isSpawned*(fv: Flowvar): bool {.inline.} =
   ## Returns true if a flowvar is spawned
   ## This may be useful for recursive algorithms that
   ## may or may not spawn a flowvar depending on a condition.
   ## This is similar to Option or Maybe types
-  return not fv.chan.isNil
-
-proc readyWith*[T](fv: Flowvar[T], childResult: T) {.inline.} =
-  ## Send the Flowvar result from the child thread processing the task
-  ## to its parent thread.
-  let resultSent {.used.} = fv.chan[].trySend(childResult)
-  postCondition: resultSent
-
-template tryComplete*[T](fv: Flowvar, parentResult: var T): bool =
-  fv.chan[].tryRecv(parentResult)
+  return not fv.node.isNil
 
 func isReady*[T](fv: Flowvar[T]): bool {.inline.} =
   ## Returns true if the result of a Flowvar is ready.
   ## In that case `sync` will not block.
   ## Otherwise the current will block to help on all the pending tasks
   ## until the Flowvar is ready.
-  not fv.chan[].isEmpty()
+  fv.node.completed.load(moAcquire)
+
+proc tryComplete*[T](fv: Flowvar[T], parentResult: var T): bool {.inline.} =
+  ## If the task is complete, move its result into `parentResult` and return true.
+  if fv.node.completed.load(moAcquire):
+    parentResult = move(cast[ptr T](fv.node.env.addr)[])
+    true
+  else:
+    false
 
 proc sync*[T](fv: sink Flowvar[T]): T {.inline, gcsafe.} =
   ## Blocks the current thread until the flowvar is available and returned.
@@ -70,3 +108,5 @@ proc sync*[T](fv: sink Flowvar[T]): T {.inline, gcsafe.} =
   mixin forceFuture
   forceFuture(fv, result)
   cleanup(fv)
+
+{.pop.} # raises: []

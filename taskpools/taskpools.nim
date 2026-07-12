@@ -56,15 +56,6 @@ const sharedHeap = defined(gcArc) or defined(gcOrc) or defined(gcAtomicArc)
 type
   WorkerID = int32
 
-  TaskCallback = proc(args: pointer) {.nimcall, gcsafe, raises: [].}
-  TaskNode = ptr object
-    # Linked list of tasks
-    parent: TaskNode
-    callback*: TaskCallback
-    args*: pointer
-    # intrusive link for the InjectionQueue Treiber stack
-    injectionNext*: TaskNode
-
   Signal = object
     terminate {.align: 64.}: Atomic[bool]
 
@@ -196,17 +187,18 @@ proc workerEntryFn(params: tuple[taskpool: Taskpool, id: WorkerID]) =
 # Tasks
 # ---------------------------------------------
 
-proc new(T: type TaskNode, parent: TaskNode, callback: TaskCallback, args: pointer): T =
-  var tn = tp_allocPtr(TaskNode)
-  tn.parent = parent
-  tn.callback = callback
-  tn.args = args
-  return tn
-
-proc runTask(tn: var TaskNode) {.inline.} =
-  ## Run a task and consumes the taskNode
-  tn.callback(tn.args)
-  tn.tp_free()
+proc runTask(tn: TaskNode) {.inline.} =
+  ## Run a task and consume the task node.
+  ##
+  ## The task environment is intrusive to the node, so the callback receives a
+  ## pointer to it. If the task carries a Flowvar (`hasFuture`), ownership is
+  ## transferred to the awaiting thread: it reads the result and frees the node.
+  ## Otherwise the node is freed here.
+  tn.callback(tn.env.addr)
+  if tn.hasFuture:
+    tn.setCompleted()
+  else:
+    tp_free(tn)
 
 proc schedule(ctx: WorkerContext, tn: sink TaskNode, forceWake = false) {.inline.} =
   ## Schedule a task in the taskpool.
@@ -309,7 +301,7 @@ proc eventLoop(ctx: var WorkerContext) =
 # Tasking
 # ---------------------------------------------
 
-proc RootTask(args: pointer) =
+proc RootTask(env: pointer) =
   discard
 
 template isRootTask(task: TaskNode): bool {.used.} =
@@ -453,7 +445,7 @@ proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [Catcha
 
   # Root task, this is a sentinel task that is never called.
   workerContext.currentTask =
-    TaskNode.new(parent = nil, callback = RootTask, args = nil)
+    TaskNode.new(parent = nil, callback = RootTask, envSize = 0)
 
   # Wait for the child threads
   discard tp.barrier.wait()
@@ -516,44 +508,60 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
     error("Closure calls cannot be spawned", fnCall)
 
   let
-    argsTup = nnkTupleConstr.newTree()
-      # Tuple for collecting function arguments and storage for return value
     fwdCall = nnkCall.newTree(fn)
-      # same as fnCall, but with parameters forwarded from the closure environment
-    env = genSym(nskTemp, "env") # closure environment
+      # same as fnCall, but with parameters forwarded from the task environment
+    env = genSym(nskTemp, "env") # task environment
 
   result = newStmtList()
 
-  # A task is similar to a closure proc but with the closure environment
-  # allocated in shared memory.
+  # A task is similar to a closure proc, but with the environment allocated
+  # intrusively in the task node (a single allocation covering the node, the
+  # arguments, and the return value slot).
   #
-  # The closure environment is a tuple that holds:
+  # The environment is a tuple that holds, in order:
   #
+  # * the return value slot, if the call returns a result (at index 0)
   # * runtime parameters, ie those that are not constants / literals / etc
-  # * Flowvar for return value, if any
   #
-  # Start with the runtime parameters:
-  var j = 0
+  # The result goes first so an awaiting Flowvar can read it via
+  # `tryComplete` without knowing the argument layout.
+  let
+    retType = fn.getImpl().params()[0]
+    hasFuture = retType.kind != nnkEmpty
+
+  var
+    envTup = nnkTupleConstr.newTree()
+      # Tuple collecting the return value slot and the runtime arguments
+    argBase = 0
+
+  if hasFuture:
+    # Reserve env[0] for the return value, default-initialized until the task runs.
+    envTup.add quote do:
+      default(type `retType`)
+    argBase = 1
+
+  # Continue with the runtime parameters:
+  var j = argBase
   for i in 1 ..< fnCall.len:
     let p = fnCall[i]
     if isStatic(p):
       # Literals can be passed as-is to the callee
       fwdCall.add p
     else:
-      # Non-literals must be copied to shared memory - add them to a tuple
+      # Non-literals must be copied to shared memory - add them to the env tuple
       # then extract them from the tuple on the calling side
       let jl = newLit(j)
       j += 1
 
       when sharedHeap:
         # In ORC, we can isolate values and move them between tasks
-        argsTup.add quote do:
+        envTup.add quote do:
           isolate(`p`)
         fwdCall.add quote do:
           extract(`env`[][`jl`])
       else:
         # `move` to support move-only types in refc
-        argsTup.add p
+        envTup.add p
         let hasClosure = newLit(p.kind == nnkSym and hasClosure(p))
 
         # `refc` uses a thread-local heap - therefore, anything heap-allocated
@@ -571,75 +579,58 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
           move(`env`[][`jl`])
   let
     envp = genSym(nskParam, "envp")
-      # closure environment, untyped pointer version in `fwdCall`
-    retType = fn.getImpl().params()[0]
-    argsTy = genSym(nskType, "ArgsType")
-
-    (fut, body) =
-      if retType.kind != nnkEmpty:
-        # if the call returns a value, create a `Flowvar` which can transfer
-        # the result back to the caller, similar to a Future.
-        #
-        # The Flowvar is added to the argument tuple, similar to the function
-        # arguments.
-        let
-          fut = genSym(nskTemp, "fut")
-          retIdx = newLit(argsTup.len)
-
-          body = quote:
-            let `env` = cast[ptr `argsTy`](`envp`)
-            readyWith(`env`[][`retIdx`], `fwdCall`)
-
-        argsTup.add fut
-
-        result.add quote do:
-          let `fut` = newFlowVar(type `retType`)
-
-        (fut, body)
-      elif argsTup.len > 0:
-        let body = quote:
-          let `env` = cast[ptr `argsTy`](`envp`)
-          `fwdCall`
-
-        (newEmptyNode(), body)
-      else:
-        (newEmptyNode(), fwdCall)
-
-    args =
-      if argsTup.len > 0:
-        let args = genSym(nskTemp, "args")
-
-        # Allocate the tuple that will hold the arguments that need to be passed
-        # to the task, potentially on a different thread
-        result.add quote do:
-          type `argsTy` = typeof(`argsTup`)
-          let `args` = tp_alloc(`argsTy`, zero = true)
-          `args`[] = `argsTup`
-
-        # ... and free it after the task has finished running - because we moved
-        # the values out of the environment when calling the function, there's
-        # nothing left to process
-        body.add quote do:
-          wasMoved(`env`[])
-          tp_free(`env`)
-        args
-      else:
-        newNilLit()
+      # task environment, untyped pointer version in `fwdCall`
+    envTy = genSym(nskType, "EnvType")
     taskFn = genSym(nskProc, $fn & "_task")
-      # Function that calls `fn` inside within the taskpool thread
+      # Function that calls `fn` within the taskpool thread
+
+    body =
+      if hasFuture:
+        # The call returns a value: run it and store the result in env[0].
+        # Readiness is signaled by the runtime (`runTask`) once this returns.
+        quote:
+          let `env` = cast[ptr `envTy`](`envp`)
+          `env`[][0] = `fwdCall`
+      elif envTup.len > 0:
+        quote:
+          let `env` = cast[ptr `envTy`](`envp`)
+          `fwdCall`
+      else:
+        fwdCall
+
+  # The env tuple type must be in scope before the callback references it.
+  if envTup.len > 0:
+    result.add quote do:
+      type `envTy` = typeof(`envTup`)
 
   result.add quote do:
     proc `taskFn`(`envp`: pointer) {.nimcall, gcsafe, raises: [].} =
       `body`
 
-    if workerContext.taskpool != `tp`:
-      let taskNode = TaskNode.new(nil, `taskFn`, `args`)
-      submitTask(`tp`, taskNode)
-    else:
-      let taskNode = TaskNode.new(workerContext.currentTask, `taskFn`, `args`)
-      schedule(workerContext, taskNode)
+  # Allocate the single task node (node + intrusive env), write the environment
+  # into it, then schedule it and, when needed, return a Flowvar over the node.
+  let
+    node = genSym(nskTemp, "taskNode")
+    fut = genSym(nskTemp, "fut")
 
-    `fut`
+  if envTup.len > 0:
+    result.add quote do:
+      let `node` = TaskNode.new(workerContext.currentTask, `taskFn`, sizeof(`envTy`))
+      cast[ptr `envTy`](`node`.env.addr)[] = `envTup`
+  else:
+    result.add quote do:
+      let `node` = TaskNode.new(workerContext.currentTask, `taskFn`, 0)
+
+  if hasFuture:
+    # `hasFuture` must be set (by newFlowVar) before scheduling, so a thread
+    # that runs the task transfers ownership to the awaiter instead of freeing.
+    result.add quote do:
+      let `fut` = newFlowVar(type `retType`, `node`)
+      schedule(workerContext, `node`)
+      `fut`
+  else:
+    result.add quote do:
+      schedule(workerContext, `node`)
 
   # Wrap in a block for namespacing
   result = nnkBlockStmt.newTree(newEmptyNode(), result)

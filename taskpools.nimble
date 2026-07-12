@@ -38,7 +38,6 @@ proc run(args, path: string) =
 
 proc runTests(args: string) =
   # Internal data structures
-  run args, "taskpools/channels_spsc_single.nim"
   run args, "taskpools/sparsesets.nim"
 
   # Examples
