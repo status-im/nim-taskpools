@@ -17,4 +17,4 @@ jobs:
         nimble --useSystemNim install -y --depsOnly unittest2
         nimble list --installed --version
         env NIMLANG=c nimble test
-#        env NIMLANG=c nimble test_bench
+        env NIMLANG=c nimble test_bench

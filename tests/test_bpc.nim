@@ -79,7 +79,7 @@ suite "Bouncing Producer Consumer":
     tp.syncAll()
     check executed.load(moAcquire) == 1
 
-# XXX maybe enable after count event + alloc optimizations
+# XXX maybe enable after PR #54 + alloc optimizations
 #     already covered by bench
 #   when defined(release) or defined(danger):
 #     test "depth=10_000; tasks/depth=999; granularity=1":

@@ -65,6 +65,5 @@ proc runBenchs(args: string) =
   # run args, "benchmarks/matmul_cache_oblivious/taskpool_matmul_co.nim"
 
 task test_bench, "Run benchs":
-  # -d:danger runs ASan and TSan
-  for mode in ["-d:danger"]:
+  for mode in ["", "-d:release", "-d:danger"]:
     runBenchs(mode)
