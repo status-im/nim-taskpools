@@ -1,6 +1,13 @@
-import ../taskpools
+# taskpools
+# Copyright (c) 2021-2026 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-var tp = Taskpool.new()
+import
+  unittest2,
+  ../taskpools
 
 proc nothing() =
   discard
@@ -17,28 +24,11 @@ proc retargint(v: int): int =
 proc arggen*[T](v: T): int =
   5
 
-tp.spawn(nothing())
-doAssert sync(tp.spawn(retint())) == 42
-
-tp.spawn(argint(42))
-
-doAssert sync(tp.spawn(retargint(42))) == 42
-doAssert sync(tp.spawn(arggen(42))) == 5
-
-const x = 42
-
-tp.spawn(argint(x))
-
 proc argtuple(v: (int, int)) =
   discard
 
-tp.spawn(argtuple((1, 2)))
-
 proc argumulti(b: bool, v: array[2, int], p: ptr int) =
   discard
-
-var varray: array[2, int]
-tp.spawn(argumulti(false, varray, nil))
 
 type MoveOnly = object
 
@@ -47,11 +37,40 @@ proc `=copy`(a: var MoveOnly, b: MoveOnly) {.error.}
 proc moveit(v: sink MoveOnly) =
   discard
 
-proc test() =
-  var v: MoveOnly
-  tp.spawn(moveit(v))
+suite "Call types":
+  setup:
+    var tp = Taskpool.new()
 
-test()
+  teardown:
+    tp.syncAll()
+    tp.shutdown()
 
-tp.syncAll()
-tp.shutdown()
+  test "no arguments, no result":
+    tp.spawn(nothing())
+
+  test "result, no arguments":
+    check sync(tp.spawn(retint())) == 42
+
+  test "argument, no result":
+    tp.spawn(argint(42))
+
+  test "argument and result":
+    check sync(tp.spawn(retargint(42))) == 42
+
+  test "generic argument":
+    check sync(tp.spawn(arggen(42))) == 5
+
+  test "const argument":
+    const x = 42
+    tp.spawn(argint(x))
+
+  test "tuple argument":
+    tp.spawn(argtuple((1, 2)))
+
+  test "multiple arguments":
+    var varray: array[2, int]
+    tp.spawn(argumulti(false, varray, nil))
+
+  test "move-only argument":
+    var v: MoveOnly
+    tp.spawn(moveit(v))
