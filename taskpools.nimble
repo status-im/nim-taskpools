@@ -7,7 +7,7 @@ description   = "lightweight, energy-efficient, easily auditable threadpool"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim >= 2.0.14"
+requires "nim >= 2.0.14", "unittest2"
 
 import strutils
 
