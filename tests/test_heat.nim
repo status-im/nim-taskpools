@@ -37,9 +37,13 @@ proc delete(mat: sink Matrix) =
 
 template `[]`(mat: Matrix, row, col: Natural): float64 =
   # row-major storage
+  assert row < mat.m
+  assert col < mat.n
   mat.buffer[row * mat.n + col]
 
 template `[]=`(mat: Matrix, row, col: Natural, value: float64) =
+  assert row < mat.m
+  assert col < mat.n
   mat.buffer[row * mat.n + col] = value
 
 # Problem definition; the analytical solution is exp(-2t) * sin(x) * sin(y)
@@ -51,12 +55,12 @@ proc randd(y, t: float64): float64 {.inline.} = exp(-2 * t) * sin(y)
 template solu(x, y, t: float64): float64 = exp(-2 * t) * sin(x) * sin(y)
 
 const
-  xu = 0.0
-  xo = 1.570796326794896558
-  yu = 0.0
-  yo = 1.570796326794896558
-  tu = 0.0
-  to = 0.0000001
+  xu = 0.0'f64
+  xo = 1.570796326794896558'f64
+  yu = 0.0'f64
+  yo = 1.570796326794896558'f64
+  tu = 0.0'f64
+  to = 0.0000001'f64
 
 var
   tp: Taskpool
@@ -169,7 +173,7 @@ proc verify(mat: Matrix): Errors =
         result.mre = tmp
   result.me /= float64(nx * ny)
 
-template checkAccurate(e: Errors) =
+template checkAccurate(e: Errors): untyped =
   ## The thresholds the benchmark verifies against. The benchmark also fails any
   ## single cell that is off by more than 1e-3; that is subsumed here, since
   ## `mae` is the maximum over all cells and is held to 1e-12.
