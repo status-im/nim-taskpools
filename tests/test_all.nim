@@ -14,5 +14,6 @@ import ./[
   test_fib,
   test_heat,
   test_nqueens,
+  test_single_thread,
   test_spc
 ]
