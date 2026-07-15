@@ -52,18 +52,6 @@ task test, "Run tests":
   for mode in ["", "-d:release", "-d:danger"]:
     runTests(mode)
 
-proc runTests(args: string) =
-  # Internal data structures
-  run args, "taskpools/channels_spsc_single.nim"
-  run args, "taskpools/sparsesets.nim"
-
-  # Examples
-  run args, "examples/e01_simple_tasks.nim"
-  run args, "examples/e02_parallel_pi.nim"
-
-  # Tests
-  run args, "tests/test_all.nim"
-
 proc runBenchs(args: string) =
   run args, "benchmarks/dfs/taskpool_dfs.nim"
   run args, "benchmarks/heat/taskpool_heat.nim"
