@@ -8,12 +8,22 @@
 import std/[monotimes, times, cpuinfo]
 
 template withGranularity*(x: int32, body: untyped): untyped =
+  ## Runs `body` in a loop for at least `x` microseconds.
   let start = getMonoTime()
-  let stop = usec
-  while true:
-    if inMicroseconds(getMonoTime() - start) >= stop:
-      break
+  let stop = int64(x)
+  while inMicroseconds(getMonoTime() - start) < stop:
     body
+
+template dummyCpt*(): untyped =
+  ## Dummy computation. Calculate fib(30) iteratively
+  var
+    fib = 0
+    f2 = 0
+    f1 = 1
+  for i in 2 .. 30:
+    fib = f1 + f2
+    f2 = f1
+    f1 = fib
 
 proc numThreads*(minThreads = 2): int =
   max(minThreads, countProcessors())

@@ -46,6 +46,14 @@ suite "Single Task Producer":
     tp.syncAll()
     check executed.load(moAcquire) == 100_000
 
+  when defined(release) or defined(danger):
+    test "tasks=1_000_000; granularity=10":
+      var executed: Atomic[int]
+      for i in 0 ..< 1_000_000:
+        tp.spawn spcConsume(10, addr executed)
+      tp.syncAll()
+      check executed.load(moAcquire) == 1_000_000
+
   test "syncAll is repeatable":
     var executed: Atomic[int]
     for round in 0 ..< 3:

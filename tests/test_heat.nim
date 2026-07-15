@@ -220,6 +220,15 @@ suite "Heat diffusion":
     checkAccurate(e)
     delete(par)
 
+  when defined(release) or defined(danger):
+    test "matches the analytical solution; grid=4096x1024; steps=100":
+      # The defaults of benchmarks/heat. Allocates 2 x 32MB of matrix
+      setupProblem(4096, 1024, 100)
+      var par = run(parallel = true)
+      let e = verify(par)
+      checkAccurate(e)
+      delete(par)
+
   test "grid=2xN: recursion bottoms out on boundary rows only":
     # With nx == 2 every row is a boundary row, so no cell is diffused and the
     # rows are set to the analytical solution directly. This only exercises the

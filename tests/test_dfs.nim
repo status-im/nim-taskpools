@@ -51,3 +51,8 @@ suite "Depth First Search":
 
   test "shallow and wide: dfs(2, 256)":
     check sync(tp.spawn dfs(2, 256)) == 65536'u32
+
+  when defined(release) or defined(danger):
+    test "dfs(8, 8)":
+      # The defaults of benchmarks/dfs: a tree of ~19M tasks
+      check sync(tp.spawn dfs(8, 8)) == uint32(8 ^ 8)
