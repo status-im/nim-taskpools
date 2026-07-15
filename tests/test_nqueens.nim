@@ -35,7 +35,12 @@ const
     92, # 8x8
     352,
     724, # 10x10
-    2680
+    2680,
+    14200,
+    73712,
+    365596,
+    2279184, # 15x15
+    14772512
   ]
 
 type Board = array[maxN, char]
@@ -51,7 +56,7 @@ func isValid(a: Board, n: int): bool =
       let q = int(a[j])
       if q == p or q == p - (j-i) or q == p + (j-i):
         return false
-  return true
+  true
 
 proc nqueensSer(n, j: int, a: Board): int =
   if n == j:
