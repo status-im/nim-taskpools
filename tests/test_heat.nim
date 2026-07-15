@@ -14,6 +14,8 @@
 # Rows are computed independently, so the parallel result must be identical to
 # the serial one bit for bit, whatever order the tasks run in.
 
+{.push raises: [], gcsafe.}
+
 import
   std/math,
   unittest2,
@@ -72,7 +74,7 @@ proc setupProblem(gridX, gridY, steps: int) =
   dtdxsq = dt / (dx * dx)
   dtdysq = dt / (dy * dy)
 
-proc initRow(m: Matrix, i: int) {.gcsafe, raises: [].} =
+proc initRow(m: Matrix, i: int) =
   ## Fills row `i` with the initial condition at t = 0
   if i == 0:
     for j in 0 ..< ny:
@@ -86,7 +88,7 @@ proc initRow(m: Matrix, i: int) {.gcsafe, raises: [].} =
       m[i, j] = f(xu + float64(i)*dx, yu + float64(j)*dy)
     m[i, ny - 1] = randb(xu + float64(i)*dx, 0)
 
-proc diffuseRow(output, input: Matrix, i: int, t: float64) {.gcsafe, raises: [].} =
+proc diffuseRow(output, input: Matrix, i: int, t: float64) =
   ## Computes row `i` at time `t` from `input` at the previous step
   if i == 0:
     for j in 0 ..< ny:
@@ -105,7 +107,7 @@ proc diffuseRow(output, input: Matrix, i: int, t: float64) {.gcsafe, raises: [].
 # Parallel: split the row range in half until a single row is left.
 # A dummy bool is returned so that the spawned half can be awaited.
 
-proc heat(m: Matrix, il, iu: int): bool {.discardable, gcsafe, raises: [].} =
+proc heat(m: Matrix, il, iu: int): bool {.discardable.} =
   if iu - il > 1:
     let im = (il + iu) div 2
     let h = tp.spawn heat(m, il, im)
@@ -114,7 +116,7 @@ proc heat(m: Matrix, il, iu: int): bool {.discardable, gcsafe, raises: [].} =
     return true
   initRow(m, il)
 
-proc diffuse(output, input: Matrix, il, iu: int, t: float64): bool {.discardable, gcsafe, raises: [].} =
+proc diffuse(output, input: Matrix, il, iu: int, t: float64): bool {.discardable.} =
   if iu - il > 1:
     let im = (il + iu) div 2
     let d = tp.spawn diffuse(output, input, il, im, t)

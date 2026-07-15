@@ -13,6 +13,8 @@
 # Each task bumps a counter that lives on the producer's stack, so the count can
 # only be read once `syncAll` has returned and no task can be running anymore.
 
+{.push raises: [], gcsafe.}
+
 import
   std/atomics,
   unittest2,

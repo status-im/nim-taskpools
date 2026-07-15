@@ -10,6 +10,8 @@
 # The naive recursive fibonacci: a task spawns a task per recursion and syncs
 # on it, i.e. worker threads block on children they may have to run themselves.
 
+{.push raises: [], gcsafe.}
+
 import
   unittest2,
   ./utils,
@@ -17,7 +19,7 @@ import
 
 var tp: Taskpool
 
-proc fib(n: int): int {.gcsafe, raises: [].} =
+proc fib(n: int): int =
   if n < 2:
     return n
   let x = tp.spawn fib(n-1)
@@ -43,13 +45,13 @@ suite "Fibonacci":
     tp.syncAll()
     tp.shutdown()
 
-  test "base cases spawn no work":
-    check sync(tp.spawn fib(0)) == 0
-    check sync(tp.spawn fib(1)) == 1
-
   test "fib(n) for n in 0 .. 20":
     for n in 0 .. 20:
       check fib(n) == fibSeq(n)
+
+  test "base cases spawn no work":
+    check sync(tp.spawn fib(0)) == 0
+    check sync(tp.spawn fib(1)) == 1
 
   test "fib(24) from a task":
     # The root itself is a task, so every sync happens on a worker thread

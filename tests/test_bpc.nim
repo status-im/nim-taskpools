@@ -14,6 +14,8 @@
 # Both roles bump a counter that lives on the caller's stack, so the count can
 # only be read once `syncAll` has returned and no task can be running anymore.
 
+{.push raises: [], gcsafe.}
+
 import
   std/atomics,
   unittest2,
@@ -27,8 +29,7 @@ proc bpcConsume(usec: int32, executed: ptr Atomic[int]) =
     dummyCpt()
   discard executed[].fetchAdd(1, moRelaxed)
 
-proc bpcProduce(n, depth: int, granularity: int32,
-                executed: ptr Atomic[int]) {.gcsafe, raises: [].} =
+proc bpcProduce(n, depth: int, granularity: int32, executed: ptr Atomic[int]) =
   if depth <= 0:
     return
   # A producer for the next depth, followed by n consumers
@@ -60,6 +61,15 @@ suite "Bouncing Producer Consumer":
       tasksPerDepth = 9
     var executed: Atomic[int]
     bpcProduce(tasksPerDepth, depth, 0, addr executed)
+    tp.syncAll()
+    check executed.load(moAcquire) == (tasksPerDepth + 1) * depth
+
+  test "depth=10_000; tasks/depth=99; granularity=1":
+    const
+      depth = 10_000
+      tasksPerDepth = 99
+    var executed: Atomic[int]
+    bpcProduce(tasksPerDepth, depth, 1, addr executed)
     tp.syncAll()
     check executed.load(moAcquire) == (tasksPerDepth + 1) * depth
 

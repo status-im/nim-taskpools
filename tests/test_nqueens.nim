@@ -15,6 +15,8 @@
 # valid whatever the worker does with it. A seq would not do: `toTask` rejects
 # GC-ed types under refc.
 
+{.push raises: [], gcsafe.}
+
 import
   unittest2,
   ./utils,
@@ -60,7 +62,7 @@ proc nqueensSer(n, j: int, a: Board): int =
     if b.isValid(j+1):
       result += nqueensSer(n, j+1, b)
 
-proc nqueensPar(n, j: int, a: Board): int {.gcsafe, raises: [].} =
+proc nqueensPar(n, j: int, a: Board): int =
   if n == j:
     return 1
 

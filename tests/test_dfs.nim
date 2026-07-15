@@ -11,6 +11,8 @@
 # the leaves; each node holds a seq of Flowvars while its children run.
 # The sum is breadth^depth.
 
+{.push raises: [], gcsafe.}
+
 import
   std/math,
   unittest2,
@@ -19,7 +21,7 @@ import
 
 var tp: Taskpool
 
-proc dfs(depth, breadth: int): uint32 {.gcsafe, raises: [].} =
+proc dfs(depth, breadth: int): uint32 =
   if depth == 0:
     return 1
 
@@ -52,7 +54,11 @@ suite "Depth First Search":
   test "shallow and wide: dfs(2, 256)":
     check sync(tp.spawn dfs(2, 256)) == 65536'u32
 
+  test "dfs(7, 7)":
+    # ~1M tasks
+    check sync(tp.spawn dfs(7, 7)) == uint32(7 ^ 7)
+
   when defined(release) or defined(danger):
     test "dfs(8, 8)":
-      # The defaults of benchmarks/dfs: a tree of ~19M tasks
+      # The defaults of benchmarks/dfs: a tree of ~16M tasks
       check sync(tp.spawn dfs(8, 8)) == uint32(8 ^ 8)
