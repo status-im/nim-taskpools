@@ -79,13 +79,15 @@ suite "Bouncing Producer Consumer":
     tp.syncAll()
     check executed.load(moAcquire) == 1
 
-  when defined(release) or defined(danger):
-    test "depth=10_000; tasks/depth=999; granularity=1":
-      # The defaults of benchmarks/bouncing_producer_consumer: 10M tasks
-      const
-        depth = 10_000
-        tasksPerDepth = 999
-      var executed: Atomic[int]
-      bpcProduce(tasksPerDepth, depth, 1, addr executed)
-      tp.syncAll()
-      check executed.load(moAcquire) == (tasksPerDepth + 1) * depth
+# XXX maybe enable after count event + alloc optimizations
+#     already covered by bench
+#   when defined(release) or defined(danger):
+#     test "depth=10_000; tasks/depth=999; granularity=1":
+#       # The defaults of benchmarks/bouncing_producer_consumer: 10M tasks
+#       const
+#         depth = 10_000
+#         tasksPerDepth = 999
+#       var executed: Atomic[int]
+#       bpcProduce(tasksPerDepth, depth, 1, addr executed)
+#       tp.syncAll()
+#       check executed.load(moAcquire) == (tasksPerDepth + 1) * depth
