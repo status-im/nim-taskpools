@@ -481,8 +481,6 @@ proc cleanup(tp: var Taskpool) =
 
   tp.tp_freeAligned()
 
-# XXX prevent external threads enqueue tasks into injectQueue
-#     before calling syncAll
 proc shutdown*(tp: var Taskpool) =
   ## Wait until all tasks are processed and then shutdown the taskpool
   preCondition: workerContext.currentTask.isRootTask()
