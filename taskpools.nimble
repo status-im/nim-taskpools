@@ -57,6 +57,7 @@ proc runBenchs(args: string) =
   run args, "benchmarks/dfs/taskpool_dfs.nim"
   run args, "benchmarks/heat/taskpool_heat.nim"
   run args, "benchmarks/nqueens/taskpool_nqueens.nim"
+  run args, "benchmarks/iqs_latency/taskpool_iqs_latency.nim"
 
   when not defined(windows):
     run args, "benchmarks/single_task_producer/taskpool_spc.nim"

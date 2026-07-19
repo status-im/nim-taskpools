@@ -232,6 +232,12 @@ proc submitTask(tp: Taskpool, tn: TaskNode) {.inline.} =
       break
   tp.eventNotifier.notify()
 
+const TasksBetweenInjectionDrains = 61
+  ## Drain the injection queue after processing at most this many local tasks,
+  ## so externally submitted tasks are not starved while a worker churns through
+  ## a local deque that internal spawns keep refilling. Prime to avoid resonance
+  ## with regular workload sizes.
+
 proc drainInjectionQueue(ctx: var WorkerContext) {.inline.} =
   ## Atomically claim the entire injection queue and push all tasks into
   ## the calling worker's Chase-Lev deque, where they become stealable.
@@ -278,9 +284,14 @@ proc eventLoop(ctx: var WorkerContext) =
   while not ctx.signal.terminate.load(moRelaxed):
     # 1. Pick from local deque
     debug: log("Worker %2d: eventLoop 1 - searching task from local deque\n", ctx.id)
+    var processed = 0'u32
     while (var taskNode = ctx.taskDeque[].pop(); not taskNode.isNil):
       debug: log("Worker %2d: eventLoop 1 - running task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
       taskNode.runTask()
+      inc processed
+      if processed >= TasksBetweenInjectionDrains:
+        processed = 0
+        ctx.drainInjectionQueue()
 
     # 2. Drain the injection queue into our Chase-Lev deque so externally submitted
     #    tasks become local work (and stealable by other workers).
