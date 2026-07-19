@@ -51,6 +51,16 @@ export
   # flowvars
   Flowvar, isSpawned, isReady, sync, isolation
 
+const TasksBetweenInjectionDrains {.intdefine: "taskpoolsIqDrainTick".} = 61
+  ## Drain the external threads task queue after processing at most this many local tasks,
+  ## so externally submitted tasks are not starved while a worker churns through
+  ## a local deque that internal spawns keep refilling. Prime to avoid resonance
+  ## with regular workload sizes. Override with `-d:taskpoolsIqDrainTick:N`.
+
+static:
+  doAssert TasksBetweenInjectionDrains > 0,
+    "taskpoolsIqDrainTick must be a positive integer"
+
 const sharedHeap = defined(gcArc) or defined(gcOrc) or defined(gcAtomicArc)
 
 type
@@ -231,12 +241,6 @@ proc submitTask(tp: Taskpool, tn: TaskNode) {.inline.} =
     if tp.injectionQueue.compareExchange(headOld, tn, moRelease, moRelaxed):
       break
   tp.eventNotifier.notify()
-
-const TasksBetweenInjectionDrains = 61
-  ## Drain the injection queue after processing at most this many local tasks,
-  ## so externally submitted tasks are not starved while a worker churns through
-  ## a local deque that internal spawns keep refilling. Prime to avoid resonance
-  ## with regular workload sizes.
 
 proc drainInjectionQueue(ctx: var WorkerContext) {.inline.} =
   ## Atomically claim the entire injection queue and push all tasks into
