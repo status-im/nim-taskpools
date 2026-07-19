@@ -42,7 +42,7 @@ import
   std/[atomics, cpuinfo, isolation, macros, random, typetraits],
   ./[
     ast_utils, channels_spsc_single, chase_lev_deques, event_notifiers, flowvars,
-    sparsesets,
+    injection_queues, sparsesets,
   ],
   ./primitives/[barriers, allocs],
   ./instrumentation/[contracts, loggers]
@@ -50,16 +50,6 @@ import
 export
   # flowvars
   Flowvar, isSpawned, isReady, sync, isolation
-
-const TasksBetweenInjectionDrains {.intdefine: "taskpoolsIqDrainTick".} = 61
-  ## Drain the external threads task queue after processing at most this many local tasks,
-  ## so externally submitted tasks are not starved while a worker churns through
-  ## a local deque that internal spawns keep refilling. Prime to avoid resonance
-  ## with regular workload sizes. Override with `-d:taskpoolsIqDrainTick:N`.
-
-static:
-  doAssert TasksBetweenInjectionDrains > 0,
-    "taskpoolsIqDrainTick must be a positive integer"
 
 const sharedHeap = defined(gcArc) or defined(gcOrc) or defined(gcAtomicArc)
 
@@ -72,9 +62,8 @@ type
     parent: TaskNode
     callback*: TaskCallback
     args*: pointer
-    # intrusive link for the injection queue;
-    # ordering is guaranteed by release/acquire on injectionQueue
-    injectionNext: TaskNode
+    # intrusive link for the InjectionQueue Treiber stack
+    injectionNext*: TaskNode
 
   Signal = object
     terminate {.align: 64.}: Atomic[bool]
@@ -114,10 +103,9 @@ type
     workerSignals: ptr UncheckedArray[Signal]
       ## Access signaledTerminate
 
-    injectionQueue {.align: 64.}: Atomic[TaskNode]
-      ## Lock-free MPMC injection queue (Treiber stack).
-      ## Any thread may push; any worker may drain via atomic exchange;
-      ## only one worker wins the exchange per drain call.
+    injectionQueue {.align: 64.}: InjectionQueue[TaskNode]
+      ## Lock-free MPMC queue for tasks submitted by threads that are not
+      ## currently running the scheduler (external threads or foreign pools).
 
 when not sharedHeap:
   proc supportsThreadMove*(T: type): bool {.compileTime.} =
@@ -231,32 +219,16 @@ proc schedule(ctx: WorkerContext, tn: sink TaskNode) {.inline.} =
 proc submitTask(tp: Taskpool, tn: TaskNode) {.inline.} =
   ## Push a task onto the injection queue from any thread.
   ## Workers will drain the queue into their Chase-Lev deques, making tasks stealable.
-  ##
-  ## Uses a Treiber stack (lock-free MPMC push, single-winner drain via exchange).
-  ## The release CAS on injectionQueue makes the plain write to tn.injectionNext
-  ## visible to the draining worker after its acquire exchange.
-  var headOld = tp.injectionQueue.load(moRelaxed)
-  while true:
-    tn.injectionNext = headOld  # plain write; ordered by the release CAS below
-    if tp.injectionQueue.compareExchange(headOld, tn, moRelease, moRelaxed):
-      break
+  tp.injectionQueue.push(tn)
   tp.eventNotifier.notify()
 
 proc drainInjectionQueue(ctx: var WorkerContext) {.inline.} =
   ## Atomically claim the entire injection queue and push all tasks into
   ## the calling worker's Chase-Lev deque, where they become stealable.
-  ## Only one worker wins the exchange; the others get nil and return immediately.
-  if ctx.taskpool.injectionQueue.load(moRelaxed).isNil:
-    return
-  var node = ctx.taskpool.injectionQueue.exchange(nil, moAcquire)
-  if node.isNil:
-    return
+  ## Only one worker wins the exchange; the others drain nothing.
   var count = 0
-  while not node.isNil:
-    let next = node.injectionNext  # plain read; ordered by the acquire exchange above
-    node.injectionNext = nil
+  for node in ctx.taskpool.injectionQueue.drain():
     ctx.taskDeque[].push(node)
-    node = next
     inc count
   # Wake workers so the newly stealable tasks get parallel attention.
   let toWake = min(count, ctx.taskpool.eventNotifier.getParked())
@@ -457,7 +429,7 @@ proc new*(T: type Taskpool, numThreads = countProcessors()): T {.raises: [Catcha
   tp.barrier.init(numThreads.int32)
   tp.eventNotifier.initialize()
   tp.numThreads = numThreads
-  tp.injectionQueue.store(nil, moRelaxed)
+  tp.injectionQueue.init()
   tp.workerDeques = tp_allocArrayAligned(ChaseLevDeque[TaskNode], numThreads, alignment = 64)
   tp.workers = tp_allocArrayAligned(Thread[(Taskpool, WorkerID)], numThreads, alignment = 64)
   tp.workerSignals = tp_allocArrayAligned(Signal, numThreads, alignment = 64)
