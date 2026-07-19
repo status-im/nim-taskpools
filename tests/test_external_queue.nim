@@ -30,6 +30,17 @@ proc submitter(ctx: Context) {.thread.} =
   for i in 0 ..< ctx.numTasks:
     ctx.tp.spawn work(ctx.executed)
 
+proc work2(): int =
+  123
+
+proc submitterFv(ctx: Context) {.thread.} =
+  var futs = newSeq[Flowvar[int]]()
+  for i in 0 ..< ctx.numTasks:
+    futs.add ctx.tp.spawn work2()
+  for fut in futs:
+    doAssert sync(fut) == 123
+    discard ctx.executed[].fetchAdd(1, moRelaxed)
+
 suite "External threads task queue":
   setup:
     var tp = Taskpool.new(numThreads())
@@ -70,6 +81,30 @@ suite "External threads task queue":
     var threads = newSeq[Thread[Context]](externalThreads)
     for t in mitems(threads):
       createThread(t, submitter, (tp, tasksPerThread, addr executed))
+    joinThreads(threads)
+    tp.syncAll()
+    check executed.load(moAcquire) == externalThreads * tasksPerThread
+
+  test "flowvar; externalThreads=1; tasksPerThread=10_000":
+    const
+      externalThreads = 1
+      tasksPerThread = 10_000
+    var executed: Atomic[int]
+    var threads = newSeq[Thread[Context]](externalThreads)
+    for t in mitems(threads):
+      createThread(t, submitterFv, (tp, tasksPerThread, addr executed))
+    joinThreads(threads)
+    tp.syncAll()
+    check executed.load(moAcquire) == externalThreads * tasksPerThread
+
+  test "flowvar; externalThreads=100; tasksPerThread=10_000":
+    const
+      externalThreads = 100
+      tasksPerThread = 10_000
+    var executed: Atomic[int]
+    var threads = newSeq[Thread[Context]](externalThreads)
+    for t in mitems(threads):
+      createThread(t, submitterFv, (tp, tasksPerThread, addr executed))
     joinThreads(threads)
     tp.syncAll()
     check executed.load(moAcquire) == externalThreads * tasksPerThread
