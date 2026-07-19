@@ -49,10 +49,6 @@ proc init*[T](q: var InjectionQueue[T]) {.inline.} =
   ## Reset the queue to empty. Must be called before any push/drain.
   q.head.store(default(T), moRelaxed)
 
-func isEmpty*[T](q: var InjectionQueue[T]): bool {.inline.} =
-  ## Racy emptiness check; only a hint outside the draining worker.
-  q.head.load(moRelaxed).isNil
-
 proc push*[T](q: var InjectionQueue[T], node: T) {.inline.} =
   ## Push a node onto the queue from any thread (lock-free MPMC).
   ##
@@ -71,6 +67,9 @@ iterator drain*[T](q: var InjectionQueue[T]): T {.inline.} =
   ##
   ## The acquire exchange orders the plain reads of the intrusive links below
   ## against the release pushes that produced them.
+  # The queue is empty most of the time, so probe with a cheap
+  # relaxed load and take the atomic exchange only when there may be work;
+  # the load(relaxed)+exchange(acquire) race is harmless.
   if not q.head.load(moRelaxed).isNil:
     var node = q.head.exchange(default(T), moAcquire)
     var next = default(T)
