@@ -30,13 +30,13 @@ proc submitter(ctx: Context) {.thread.} =
   for i in 0 ..< ctx.numTasks:
     ctx.tp.spawn work(ctx.executed)
 
-proc work2(): int =
+proc workInt(): int =
   123
 
 proc submitterFv(ctx: Context) {.thread.} =
   var futs = newSeq[Flowvar[int]]()
   for i in 0 ..< ctx.numTasks:
-    futs.add ctx.tp.spawn work2()
+    futs.add ctx.tp.spawn workInt()
   for fut in futs:
     doAssert sync(fut) == 123
     discard ctx.executed[].fetchAdd(1, moRelaxed)
@@ -105,6 +105,76 @@ suite "External threads task queue":
     var threads = newSeq[Thread[Context]](externalThreads)
     for t in mitems(threads):
       createThread(t, submitterFv, (tp, tasksPerThread, addr executed))
+    joinThreads(threads)
+    tp.syncAll()
+    check executed.load(moAcquire) == externalThreads * tasksPerThread
+
+# submitTask only wakes a worker on the injection queue's empty->non-empty
+# transition. Unlike an internal spawn (whose task's owner is live and always
+# drains its own deque before parking), an injected task has no owning thread:
+# its only consumers are the pool workers, which may all be parked. So the
+# empty->non-empty wake is the sole guarantee that a consumer shows up. A lost
+# wake there is a liveness bug (a hang), invisible to ThreadSanitizer, so we
+# exercise it directly. A small pool is used so workers park quickly between
+# submissions, maximizing the empty->non-empty edges.
+
+proc pingPong(ctx: Context) {.thread.} =
+  ## Submit one task and block until it completes before submitting the next.
+  ## Each round takes the injection queue empty -> non-empty -> empty, so a
+  ## worker must be woken from park every round; a lost wake hangs here.
+  for i in 0 ..< ctx.numTasks:
+    let fv = ctx.tp.spawn workInt()
+    doAssert sync(fv) == 123
+    discard ctx.executed[].fetchAdd(1, moRelaxed)
+
+suite "External threads injection wake edge":
+  setup:
+    # Small pool so workers park quickly between injections, driving the
+    # empty->non-empty transition submitTask's wake optimization hinges on.
+    var tp = Taskpool.new(2)
+
+  teardown:
+    tp.syncAll()
+    tp.shutdown()
+
+  test "ping-pong; externalThreads=1; rounds=50_000":
+    # Deterministic edge: the queue is provably empty between rounds, so every
+    # submission must wake a parked worker.
+    const
+      externalThreads = 1
+      rounds = 50_000
+    var executed: Atomic[int]
+    var threads = newSeq[Thread[Context]](externalThreads)
+    for t in mitems(threads):
+      createThread(t, pingPong, (tp, rounds, addr executed))
+    joinThreads(threads)
+    tp.syncAll()
+    check executed.load(moAcquire) == externalThreads * rounds
+
+  test "ping-pong; externalThreads=8; rounds=20_000":
+    # Concurrent submitters contend on the injection queue head while it churns
+    # empty <-> non-empty under a 2-worker pool.
+    const
+      externalThreads = 8
+      rounds = 20_000
+    var executed: Atomic[int]
+    var threads = newSeq[Thread[Context]](externalThreads)
+    for t in mitems(threads):
+      createThread(t, pingPong, (tp, rounds, addr executed))
+    joinThreads(threads)
+    tp.syncAll()
+    check executed.load(moAcquire) == externalThreads * rounds
+
+  test "trickle; externalThreads=8; tasksPerThread=100_000":
+    # High-throughput fire-and-forget submissions onto a small pool: the queue
+    # repeatedly drains to empty and is re-armed under heavy contention.
+    const
+      externalThreads = 8
+      tasksPerThread = 100_000
+    var executed: Atomic[int]
+    var threads = newSeq[Thread[Context]](externalThreads)
+    for t in mitems(threads):
+      createThread(t, submitter, (tp, tasksPerThread, addr executed))
     joinThreads(threads)
     tp.syncAll()
     check executed.load(moAcquire) == externalThreads * tasksPerThread

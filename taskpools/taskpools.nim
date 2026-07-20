@@ -225,9 +225,12 @@ proc schedule(ctx: WorkerContext, tn: sink TaskNode, forceWake = false) {.inline
 proc submitTask(tp: Taskpool, tn: TaskNode) {.inline.} =
   ## Push a task onto the injection queue from any thread.
   ## Workers will drain the queue into their Chase-Lev deques, making tasks stealable.
-  tp.injectionQueue.push(tn)
-  # XXX wake when injectionQueue was empty
-  tp.globalBackoff.wake()
+  var wasEmpty = false
+  tp.injectionQueue.push(tn, wasEmpty)
+  if wasEmpty:
+    # only one wake is needed; the worker will wake one after draining the queue,
+    # the next worker will wake one after steal, and so on.
+    tp.globalBackoff.wake()
 
 proc drainInjectionQueue(ctx: var WorkerContext) {.inline.} =
   ## Atomically claim the entire injection queue and push all tasks into
@@ -272,38 +275,36 @@ proc eventLoop(ctx: var WorkerContext) =
 
     let ticket = ctx.taskpool.globalBackoff.sleepy()
 
-    # 2. Drain the injection queue into our Chase-Lev deque so externally submitted
-    #    tasks become local work (and stealable by other workers).
+    # Drain the injection queue into our Chase-Lev deque so externally submitted
+    # tasks become local work (and stealable by other workers).
     ctx.drainInjectionQueue()
 
-    # 3. Re-check local deque; it may now contain injected tasks.
     if (var taskNode = ctx.taskDeque[].pop(); not taskNode.isNil):
-      debug: log("Worker %2d: eventLoop 3 - running injected task 0x%.08x\n", ctx.id, taskNode)
+      # 2. Local queue contains injected tasks.
+      debug: log("Worker %2d: eventLoop 2 - running injected task 0x%.08x\n", ctx.id, taskNode)
       ctx.taskpool.globalBackoff.cancelSleep()
       ctx.taskpool.globalBackoff.wake()
       taskNode.runTask()
     elif (var stolenTask = ctx.trySteal(); not stolenTask.isNil):
-      # 4.a Run stolen task
-      debug: log("Worker %2d: eventLoop 4.a - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, stolenTask, stolenTask.parent, ctx.currentTask)
+      # 3. Run stolen task
+      debug: log("Worker %2d: eventLoop 3 - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, stolenTask, stolenTask.parent, ctx.currentTask)
       # We managed to steal a task, cancel sleep
       ctx.taskpool.globalBackoff.cancelSleep()
       # Theft successful, there might be more work for idle threads, wake one
       # cancelSleep must be done before as wake has an optimization
       # to not notify when a thread is sleepy
       ctx.taskpool.globalBackoff.wake()
-      # 2.a Run task
-      debug: log("Worker %2d: eventLoop 2.a - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, stolenTask, stolenTask.parent, ctx.currentTask)
       stolenTask.runTask()
     elif ctx.signal.terminate.load(moAcquire):
-      # 2.b Taskpool has no more tasks and we were signaled to terminate
+      # 4. Taskpool has no more tasks and we were signaled to terminate
       ctx.taskpool.globalBackoff.cancelSleep()
-      debug: log("Worker %2d: eventLoop 2.b - terminated\n", ctx.id)
+      debug: log("Worker %2d: eventLoop 4 - terminated\n", ctx.id)
       break
     else:
-      # 2.c Park the thread until a new task enters the taskpool
-      debug: log("Worker %2d: eventLoop 2.c - sleeping\n", ctx.id)
+      # 5. Park the thread until a new task enters the taskpool
+      debug: log("Worker %2d: eventLoop 5.a - sleeping\n", ctx.id)
       ctx.taskpool.globalBackoff.sleep(ticket)
-      debug: log("Worker %2d: eventLoop 2.c - waking\n", ctx.id)
+      debug: log("Worker %2d: eventLoop 5.b - waking\n", ctx.id)
 
 # Tasking
 # ---------------------------------------------
@@ -392,34 +393,29 @@ proc syncAll*(tp: Taskpool) =
       debug: log("Worker %2d: syncAll 1 - running task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
       taskNode.runTask()
 
-    # 2. Drain injection queue into local deque so externally submitted tasks
-    #    are not left stranded while we wait for the pool to go idle.
+    # Drain injection queue into local deque so externally submitted tasks
+    # are not left stranded while we wait for the pool to go idle.
     ctx.drainInjectionQueue()
 
-    # 3. Re-check local deque; it may now contain injected tasks.
     if (var taskNode = ctx.taskDeque[].pop(); not taskNode.isNil):
-      debug: log("Worker %2d: syncAll 3 - running injected task 0x%.08x\n", ctx.id, taskNode)
+      # 2. Local queue contains injected tasks.
+      debug: log("Worker %2d: syncAll 2 - running injected task 0x%.08x\n", ctx.id, taskNode)
       ctx.taskpool.globalBackoff.wake()
       taskNode.runTask()
-      continue # back to step 1
-
-    # 2. Help other threads
-    debug: log("Worker %2d: syncAll 2 - becoming a thief\n", ctx.id)
-
-    if (var taskNode = ctx.trySteal(); not taskNode.isNil):
-      # 2.a We stole some task
-      debug: log("Worker %2d: syncAll 2.a - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
+    elif (var taskNode = ctx.trySteal(); not taskNode.isNil):
+      # 3. We stole some task
+      debug: log("Worker %2d: syncAll 3 - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
       # Theft successful, there might be more work for idle threads, wake one
       ctx.taskpool.globalBackoff.wake()
       taskNode.runTask()
     elif tp.globalBackoff.getNumWaiters() == (0'i32, int32(tp.numThreads - 1)):
-      # 2.b all threads besides the current are parked (and none are
-      #     in pre-sleep, so none can still grab a task and create work)
+      # 4. all threads besides the current are parked (and none are
+      #    in pre-sleep, so none can still grab a task and create work)
       debugTermination:
-        log("Worker %2d: syncAll 2.b - termination, all other threads sleeping\n", ctx.id)
+        log("Worker %2d: syncAll 4 - termination, all other threads sleeping\n", ctx.id)
       break
     else:
-      # 2.c We don't park as there is no notif for task completion
+      # 5. We don't park as there is no notif for task completion
       cpuRelax()
 
   debugTermination:
