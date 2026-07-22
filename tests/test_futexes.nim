@@ -69,16 +69,11 @@ suite "Futex":
     s.futex.teardown()
 
   test "wait() returns immediately when value != expected":
-    var s: WaitState
-    s.futex.initialize()
-    s.futex.store(1, moRelease)
-
-    var thr: Thread[ptr WaitState]
-    createThread(thr, waiter, addr s)
-    joinThread(thr)
-
-    check s.woke.load(moAcquire)
-    s.futex.teardown()
+    var futex: Futex
+    futex.initialize()
+    futex.store(1, moRelease)
+    futex.wait(0)  # won't hang because value != expected
+    futex.teardown()
 
   test "wakeAll() releases every parked waiter":
     const numWaiters = 4
