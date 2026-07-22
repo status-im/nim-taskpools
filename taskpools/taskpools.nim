@@ -269,7 +269,7 @@ proc eventLoop(ctx: var WorkerContext) =
       debug: log("Worker %2d: eventLoop 1 - running task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
       taskNode.runTask()
       inc processed
-      if processed >= TasksBetweenInjectionDrains:
+      if processed >= tasksBetweenInjectionDrains:
         processed = 0
         ctx.drainInjectionQueue()
 
