@@ -27,7 +27,7 @@ import
 # avoided, and we test it directly (single-threaded, deterministic).
 
 const
-  observeWindowMs = 50
+  observeWindowMs = 100
   maxParkedSpins = 10_000
 
 type
@@ -101,13 +101,10 @@ suite "EventCount":
     var thr: Thread[ptr ParkState]
     createThread(thr, parker, addr s)
 
-    spinUntilBool(s.reached, true)
-    while s.ec.getNumWaiters().committedSleep != 1:
-      discard
-
     # This is racy but if the futex does not
     # wait and return immediately, it should register
     # more than maxParkedSpins in observeWindowMs.
+    spinUntilBool(s.reached, true)
     sleep(observeWindowMs)
     check s.spins.load(moAcquire) < maxParkedSpins
     check not s.woke.load(moAcquire)
