@@ -17,10 +17,10 @@ export MemoryOrder
 # ------------------------------------------------------------------------
 
 const
-  NR_Futex = 202
-
   FUTEX_WAIT_PRIVATE = 128
   FUTEX_WAKE_PRIVATE = 129
+
+var NR_Futex {.importc: "SYS_futex", header: "<sys/syscall.h>".}: clong
 
 proc syscall(sysno: clong): cint {.importc, header:"<unistd.h>", varargs.}
 
