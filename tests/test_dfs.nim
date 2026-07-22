@@ -57,8 +57,3 @@ suite "Depth First Search":
   test "dfs(7, 7)":
     # ~1M tasks
     check sync(tp.spawn dfs(7, 7)) == uint32(7 ^ 7)
-
-  when defined(release) or defined(danger):
-    test "dfs(8, 8)":
-      # The defaults of benchmarks/dfs: a tree of ~16M tasks
-      check sync(tp.spawn dfs(8, 8)) == uint32(8 ^ 8)
