@@ -136,3 +136,23 @@ suite "EventCount":
     check s.woke.load(moAcquire) == numWaiters
     check s.ec.getNumWaiters().preSleep == 0
     check s.ec.getNumWaiters().committedSleep == 0
+
+  test "supports more than 256 committed waiters":
+    const numWaiters = 257
+    var s: WakeAllState
+    s.ec.initialize()
+
+    var threads = newSeq[Thread[ptr WakeAllState]](numWaiters)
+    for t in mitems(threads):
+      createThread(t, multiParker, addr s)
+
+    while s.ec.getNumWaiters().committedSleep != numWaiters:
+      discard
+
+    s.condition.store(true, moRelease)
+    s.ec.wakeAll()
+    joinThreads(threads)
+
+    check s.woke.load(moAcquire) == numWaiters
+    check s.ec.getNumWaiters().preSleep == 0
+    check s.ec.getNumWaiters().committedSleep == 0
