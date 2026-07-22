@@ -58,7 +58,7 @@ task test_generic_futex, "Run tests with generic futex":
 
 proc runBenchs(args: string) =
   run args, "benchmarks/dfs/taskpool_dfs.nim"
-  run args, "benchmarks/fibonacci/taskpool_fib.nim"
+  # run args, "benchmarks/fibonacci/taskpool_fib.nim"
   run args, "benchmarks/heat/taskpool_heat.nim"
   run args, "benchmarks/nqueens/taskpool_nqueens.nim"
   run args, "benchmarks/iqs_latency/taskpool_iqs_latency.nim"
@@ -73,3 +73,6 @@ proc runBenchs(args: string) =
 task test_bench, "Run benchs":
   for mode in ["", "-d:release", "-d:danger"]:
     runBenchs(mode)
+
+  # Avoid TSan; it's too slow
+  run "-d:release", "benchmarks/fibonacci/taskpool_fib.nim"
