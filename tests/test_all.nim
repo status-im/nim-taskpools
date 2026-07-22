@@ -8,11 +8,13 @@
 {.warning[UnusedImport]:off .}
 
 import ./[
+  test_backoff,
   test_bpc,
   test_calltypes,
   test_dfs,
   test_external_queue,
   test_fib,
+  test_futexes,
   test_heat,
   test_nqueens,
   test_single_thread,
