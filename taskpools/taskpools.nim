@@ -613,24 +613,36 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
     node = genSym(nskTemp, "taskNode")
     fut = genSym(nskTemp, "fut")
 
+  let parent = quote do:
+    if workerContext.taskpool != `tp`:
+      nil
+    else:
+      workerContext.currentTask
+
   if envTup.len > 0:
     result.add quote do:
-      let `node` = TaskNode.new(workerContext.currentTask, `taskFn`, sizeof(`envTy`))
+      let `node` = TaskNode.new(`parent`, `taskFn`, sizeof(`envTy`))
       cast[ptr `envTy`](`node`.env.addr)[] = `envTup`
   else:
     result.add quote do:
-      let `node` = TaskNode.new(workerContext.currentTask, `taskFn`, 0)
+      let `node` = TaskNode.new(`parent`, `taskFn`, 0)
 
   if hasFuture:
     # `hasFuture` must be set (by newFlowVar) before scheduling, so a thread
     # that runs the task transfers ownership to the awaiter instead of freeing.
     result.add quote do:
       let `fut` = newFlowVar(type `retType`, `node`)
-      schedule(workerContext, `node`)
+      if workerContext.taskpool != `tp`:
+        submitTask(`tp`, `node`)
+      else:
+        schedule(workerContext, `node`)
       `fut`
   else:
     result.add quote do:
-      schedule(workerContext, `node`)
+      if workerContext.taskpool != `tp`:
+        submitTask(`tp`, `node`)
+      else:
+        schedule(workerContext, `node`)
 
   # Wrap in a block for namespacing
   result = nnkBlockStmt.newTree(newEmptyNode(), result)
