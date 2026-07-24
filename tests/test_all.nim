@@ -14,6 +14,7 @@ import ./[
   test_dfs,
   test_external_queue,
   test_fib,
+  test_flowvar,
   test_futexes,
   test_heat,
   test_nqueens,
