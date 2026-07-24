@@ -42,7 +42,7 @@ type
     # A Flowvar merely references the intrusive task node that carries the
     # result. It is kept a single pointer wide so it can be tested with `isNil`
     # and stored cheaply in collections.
-    node: TaskNode
+    tn: TaskNode
 
 # TaskNode
 # ------------------------------------------------------------------------------
@@ -56,9 +56,9 @@ proc new*(T: type TaskNode, parent: TaskNode, callback: TaskCallback, envSize: i
   tn.hasFuture = false
   tn
 
-proc setCompleted*(node: TaskNode) {.inline.} =
+proc setCompleted*(tn: TaskNode) {.inline.} =
   ## Mark a task as complete.
-  node.completed.store(true, moRelease)
+  tn.completed.store(true, moRelease)
 
 # Flowvars
 # ------------------------------------------------------------------------------
@@ -70,35 +70,35 @@ proc setCompleted*(node: TaskNode) {.inline.} =
 # - taskpools level when returning the flowvar from the spawn macro
 # - when storing flowvars in collections (seq/array)
 
-proc newFlowVar*(T: typedesc, node: TaskNode): Flowvar[T] {.inline.} =
-  ## Create a Flowvar referencing `node`. Must be called before the node is
+proc newFlowVar*(T: typedesc, tn: TaskNode): Flowvar[T] {.inline.} =
+  ## Create a Flowvar referencing `tn`. Must be called before the task node is
   ## scheduled so a thread running the task hands ownership to the awaiter.
-  result.node = node
-  node.hasFuture = true
+  result.tn = tn
+  tn.hasFuture = true
 
 proc cleanup(fv: var Flowvar) {.inline.} =
-  if not fv.node.isNil:
-    tp_free(fv.node)
-    fv.node = nil
+  if not fv.tn.isNil:
+    tp_free(fv.tn)
+    fv.tn = nil
 
 func isSpawned*(fv: Flowvar): bool {.inline.} =
   ## Returns true if a flowvar is spawned
   ## This may be useful for recursive algorithms that
   ## may or may not spawn a flowvar depending on a condition.
   ## This is similar to Option or Maybe types
-  return not fv.node.isNil
+  return not fv.tn.isNil
 
 func isReady*[T](fv: Flowvar[T]): bool {.inline.} =
   ## Returns true if the result of a Flowvar is ready.
   ## In that case `sync` will not block.
   ## Otherwise the current will block to help on all the pending tasks
   ## until the Flowvar is ready.
-  fv.node.completed.load(moAcquire)
+  fv.tn.completed.load(moAcquire)
 
 proc tryComplete*[T](fv: Flowvar[T], parentResult: var T): bool {.inline.} =
   ## If the task is complete, move its result into `parentResult` and return true.
-  if fv.node.completed.load(moAcquire):
-    parentResult = move(cast[ptr T](fv.node.env.addr)[])
+  if fv.tn.completed.load(moAcquire):
+    parentResult = move(cast[ptr T](fv.tn.env.addr)[])
     true
   else:
     false
