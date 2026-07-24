@@ -619,6 +619,7 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
   let fut = genSym(nskTemp, "fut")
 
   if hasFuture:
+    # Must be done before the task node is scheduled.
     result.add quote do:
       let `fut` = newFlowVar(type `retType`, `tn`)
   

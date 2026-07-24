@@ -50,13 +50,14 @@ type
 proc new*(T: type TaskNode, parent: TaskNode, callback: TaskCallback, envSize: int): T =
   var tn = tp_allocUnchecked(deref(T), sizeof(deref(T)) + envSize, zero = true)
   tn.parent = parent
+  tn.injectionNext = nil
   tn.callback = callback
   tn.completed.store(false, moRelaxed)
   tn.hasFuture = false
   tn
 
 proc setCompleted*(node: TaskNode) {.inline.} =
-  ## Mark a task as complete, transferring its result to any awaiting Flowvar.
+  ## Mark a task as complete.
   node.completed.store(true, moRelease)
 
 # Flowvars
@@ -75,9 +76,10 @@ proc newFlowVar*(T: typedesc, node: TaskNode): Flowvar[T] {.inline.} =
   result.node = node
   node.hasFuture = true
 
-proc cleanup*(fv: Flowvar) {.inline.} =
+proc cleanup*(fv: var Flowvar) {.inline.} =
   if not fv.node.isNil:
     tp_free(fv.node)
+    fv.node = nil
 
 func isSpawned*(fv: Flowvar): bool {.inline.} =
   ## Returns true if a flowvar is spawned
