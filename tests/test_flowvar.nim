@@ -26,7 +26,7 @@ proc gated(): int =
     gateEntered.store(true, moRelease)
   1234
 
-const grain = 31
+const grain = 4
 
 proc parallelSum(lo, hi: int): int =
   ## Recursive divide-and-conquer sum over [lo, hi).
@@ -51,7 +51,7 @@ proc seqSum(lo, hi: int): int =
   for i in lo ..< hi:
     result += i
 
-suite "Flowvar isSpawned / isReady":
+suite "Flowvar":
   setup:
     tp = Taskpool.new(numThreads())
 
