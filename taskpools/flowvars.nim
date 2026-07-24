@@ -76,7 +76,7 @@ proc newFlowVar*(T: typedesc, node: TaskNode): Flowvar[T] {.inline.} =
   result.node = node
   node.hasFuture = true
 
-proc cleanup*(fv: var Flowvar) {.inline.} =
+proc cleanup(fv: var Flowvar) {.inline.} =
   if not fv.node.isNil:
     tp_free(fv.node)
     fv.node = nil
