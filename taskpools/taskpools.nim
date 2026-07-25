@@ -187,14 +187,17 @@ proc workerEntryFn(params: tuple[taskpool: Taskpool, id: WorkerID]) =
 # Tasks
 # ---------------------------------------------
 
-proc runTask(tn: TaskNode) {.inline.} =
+proc runTask(ctx: var WorkerContext, tn: TaskNode) {.inline.} =
   ## Run a task and consume the task node.
   ##
   ## The task environment is intrusive to the node, so the callback receives a
   ## pointer to it. If the task carries a Flowvar (`hasFuture`), ownership is
   ## transferred to the awaiting thread: it reads the result and frees the node.
   ## Otherwise the node is freed here.
+  let suspendedTask = ctx.currentTask
+  ctx.currentTask = tn
   tn.callback(tn.env.addr)
+  ctx.currentTask = suspendedTask
   if tn.hasFuture:
     tn.setCompleted()
   else:
@@ -259,7 +262,7 @@ proc eventLoop(ctx: var WorkerContext) =
     var processed = 0'u32
     while (var taskNode = ctx.taskDeque[].pop(); not taskNode.isNil):
       debug: log("Worker %2d: eventLoop 1 - running task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
-      taskNode.runTask()
+      ctx.runTask(taskNode)
       inc processed
       if processed >= tasksBetweenInjectionDrains:
         processed = 0
@@ -276,7 +279,7 @@ proc eventLoop(ctx: var WorkerContext) =
       debug: log("Worker %2d: eventLoop 2 - running injected task 0x%.08x\n", ctx.id, taskNode)
       ctx.taskpool.globalBackoff.cancelSleep()
       ctx.taskpool.globalBackoff.wake()
-      taskNode.runTask()
+      ctx.runTask(taskNode)
     elif (var stolenTask = ctx.trySteal(); not stolenTask.isNil):
       # 3. Run stolen task
       debug: log("Worker %2d: eventLoop 3 - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, stolenTask, stolenTask.parent, ctx.currentTask)
@@ -286,7 +289,7 @@ proc eventLoop(ctx: var WorkerContext) =
       # cancelSleep must be done before as wake has an optimization
       # to not notify when a thread is sleepy
       ctx.taskpool.globalBackoff.wake()
-      stolenTask.runTask()
+      ctx.runTask(stolenTask)
     elif ctx.signal.terminate.load(moAcquire):
       # 4. Taskpool has no more tasks and we were signaled to terminate
       ctx.taskpool.globalBackoff.cancelSleep()
@@ -334,7 +337,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
       ctx.schedule(taskNode, forceWake = true) # reschedule task and wake a sibling to take it over.
       break
     debug: log("Worker %2d: sync 1 - running task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
-    taskNode.runTask()
+    ctx.runTask(taskNode)
     if isFutReady():
       debug: log("Worker %2d: sync 1 - future ready, exiting\n", ctx.id)
       return
@@ -352,11 +355,11 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
       ctx.taskpool.globalBackoff.wake()
       # We stole some task, we hope we advance our awaited task
       debug: log("Worker %2d: sync 2.1 - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
-      taskNode.runTask()
+      ctx.runTask(taskNode)
     # elif (taskNode = ctx.taskDeque[].pop(); not taskNode.isNil):
     #   # We advance our own queue, this increases throughput but may impact latency on the awaited task
     #   debug: log("Worker %2d: sync 2.2 - couldn't steal, running own task\n", ctx.id)
-    #   taskNode.runTask()
+    #   ctx.runTask(taskNode)
     else:
       # We don't park as there is no notif for task completion
       cpuRelax()
@@ -383,7 +386,7 @@ proc syncAll*(tp: Taskpool) =
     debug: log("Worker %2d: syncAll 1 - searching task from local deque\n", ctx.id)
     while (var taskNode = ctx.taskDeque[].pop(); not taskNode.isNil):
       debug: log("Worker %2d: syncAll 1 - running task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
-      taskNode.runTask()
+      ctx.runTask(taskNode)
 
     # Drain injection queue into local deque so externally submitted tasks
     # are not left stranded while we wait for the pool to go idle.
@@ -393,13 +396,13 @@ proc syncAll*(tp: Taskpool) =
       # 2. Local queue contains injected tasks.
       debug: log("Worker %2d: syncAll 2 - running injected task 0x%.08x\n", ctx.id, taskNode)
       ctx.taskpool.globalBackoff.wake()
-      taskNode.runTask()
+      ctx.runTask(taskNode)
     elif (var taskNode = ctx.trySteal(); not taskNode.isNil):
       # 3. We stole some task
       debug: log("Worker %2d: syncAll 3 - stole task 0x%.08x (parent 0x%.08x, current 0x%.08x)\n", ctx.id, taskNode, taskNode.parent, ctx.currentTask)
       # Theft successful, there might be more work for idle threads, wake one
       ctx.taskpool.globalBackoff.wake()
-      taskNode.runTask()
+      ctx.runTask(taskNode)
     elif tp.globalBackoff.getNumWaiters() == (0'i32, int32(tp.numThreads - 1)):
       # 4. all threads besides the current are parked (and none are
       #    in pre-sleep, so none can still grab a task and create work)
