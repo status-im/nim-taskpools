@@ -1,7 +1,7 @@
 mode = ScriptMode.Verbose
 
 packageName   = "taskpools"
-version       = "0.2.0"
+version       = "0.2.1"
 author        = "Status Research & Development GmbH"
 description   = "lightweight, energy-efficient, easily auditable threadpool"
 license       = "MIT"
