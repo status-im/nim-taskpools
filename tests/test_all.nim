@@ -20,5 +20,6 @@ import ./[
   test_nqueens,
   test_single_thread,
   test_spc,
+  test_spawn_spin,
   test_task_backoff
 ]

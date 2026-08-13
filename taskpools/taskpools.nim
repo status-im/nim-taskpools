@@ -214,8 +214,8 @@ proc schedule(ctx: WorkerContext, tn: sink TaskNode, forceWake = false) {.inline
   # Instead of notifying every time a task is scheduled, we notify
   # only when the worker queue is empty. This is a good approximation
   # of starvation in work-stealing.
-  let wasEmpty = ctx.taskDeque[].peek() == 0
-  ctx.taskDeque[].push(tn)
+  var wasEmpty = false
+  ctx.taskDeque[].push(tn, wasEmpty)
   if forceWake or wasEmpty:
     ctx.taskpool.globalBackoff.wake()
 
@@ -233,10 +233,12 @@ proc drainInjectionQueue(ctx: var WorkerContext): bool {.inline, discardable.} =
   ## Atomically claim the entire injection queue and push all tasks into
   ## the calling worker's Chase-Lev deque, where they become stealable.
   ## Only one worker wins the exchange; the others drain nothing.
+  ## Return whether the task queue was empty before the drain.
   result = false
+  var wasEmpty = false
   for node in ctx.taskpool.injectionQueue.drain():
-    ctx.taskDeque[].push(node)
-    result = true
+    ctx.taskDeque[].push(node, wasEmpty)
+    result = result or wasEmpty
 
 # Scheduler
 # ---------------------------------------------
