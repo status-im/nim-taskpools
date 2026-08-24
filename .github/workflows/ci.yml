@@ -4,14 +4,15 @@ on:
     branches:
       - stable
       - unstable
+      - test-minver
   pull_request:
   workflow_dispatch:
 
 jobs:
   build:
-    uses: status-im/nimbus-common-workflow/.github/workflows/common.yml@main
+    uses: status-im/nimbus-common-workflow/.github/workflows/common.yml@minver
     with:
-      nim-versions: '["version-2-0", "version-2-2", "version-2-4", "devel"]'
+      install-command: 'nimble --resolver:minver install -y --depsOnly'
       test-command: |
         nim -v
         nimble list --installed --version
