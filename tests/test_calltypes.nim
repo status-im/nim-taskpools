@@ -33,6 +33,9 @@ proc argtuple(v: (int, int)) =
 proc argstr(s: string): int =
   s.len
 
+proc retstr(s: string): string =
+  s
+
 proc retref(): ref string =
   var ret = new string
   ret[] = "hello"
@@ -86,6 +89,18 @@ suite "Call types":
     var v: MoveOnly
     tp.spawn(moveit(v))
 
+  when not supportsGcTypes:
+    test "string argument":
+      var s = "item"
+      check not compiles(tp.spawn(argstr(s)))
+
+    test "string return":
+      var s = "item"
+      check not compiles(tp.spawn(retstr(s)))
+
+    test "ref return":
+      check not compiles(tp.spawn(retref()))
+
   when supportsGcTypes:
     test "string argument":
       var futs: seq[Flowvar[int]]
@@ -99,7 +114,11 @@ suite "Call types":
         total += sync futs[i]
       check total == expected
 
+    test "string return":
+      var s = "foo"
+      let ret = sync tp.spawn(retstr(s))
+      check ret == "foo"
+
     test "ref return":
-      var fv = tp.spawn(retref())
-      let ret = sync(fv)
+      let ret = sync tp.spawn(retref())
       check ret[] == "hello"
