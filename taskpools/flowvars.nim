@@ -9,8 +9,10 @@
 {.push raises: [].}
 
 import
-  std/atomics,
+  std/[atomics, isolation],
   ./primitives/[allocs, futexes]
+
+const sharedHeap* = defined(gcArc) or defined(gcOrc) or defined(gcAtomicArc)
 
 # Tasks have an efficient design so that a single heap allocation
 # is required per `spawn`.
@@ -196,7 +198,10 @@ func isReady*[T](fv: Flowvar[T]): bool {.inline.} =
 proc tryComplete*[T](fv: Flowvar[T], parentResult: var T): bool {.inline.} =
   ## If the task is complete, move its result into `parentResult` and return true.
   if fv.tn.isCompleted():
-    parentResult = move(cast[ptr T](fv.tn.env.addr)[])
+    when sharedHeap:
+      parentResult = extract(cast[ptr Isolated[T]](fv.tn.env.addr)[])
+    else:
+      parentResult = move(cast[ptr T](fv.tn.env.addr)[])
     true
   else:
     false

@@ -24,7 +24,7 @@ proc argint(v: int) =
 proc retargint(v: int): int =
   v
 
-proc arggen*[T](v: T): int =
+proc arggen[T](v: T): int =
   5
 
 proc argtuple(v: (int, int)) =
@@ -32,6 +32,11 @@ proc argtuple(v: (int, int)) =
 
 proc argstr(s: string): int =
   s.len
+
+proc retref(): ref string =
+  var ret = new string
+  ret[] = "hello"
+  ret
 
 proc argumulti(b: bool, v: array[2, int], p: ptr int) =
   discard
@@ -93,3 +98,8 @@ suite "Call types":
       for i in 0 ..< 64:
         total += sync futs[i]
       check total == expected
+
+    test "ref return":
+      var fv = tp.spawn(retref())
+      let ret = sync(fv)
+      check ret[] == "hello"
