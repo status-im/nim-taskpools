@@ -114,11 +114,38 @@ suite "Call types":
         total += sync futs[i]
       check total == expected
 
-    test "string return":
+    test "string argument variant":
       var s = "foo"
-      let ret = sync tp.spawn(retstr(s))
-      check ret == "foo"
+      let fv = tp.spawn argstr(s)
+      # force run in another thread
+      while not isReady(fv):
+        discard
+      check sync(fv) == 3
+
+    test "string return":
+      var futs: seq[Flowvar[string]]
+      for i in 0 ..< 64:
+        let s = "item" & $i
+        futs.add tp.spawn(retstr(s))
+      for i in 0 ..< 64:
+        check sync(futs[i]) == "item" & $i
+
+    test "string return variant":
+      var s = "foo"
+      let fv = tp.spawn retstr(s)
+      while not isReady(fv):
+        discard
+      check sync(fv) == "foo"
 
     test "ref return":
-      let ret = sync tp.spawn(retref())
-      check ret[] == "hello"
+      var futs: seq[Flowvar[ref string]]
+      for i in 0 ..< 64:
+        futs.add tp.spawn(retref())
+      for i in 0 ..< 64:
+        check sync(futs[i])[] == "hello"
+
+    test "ref return variant":
+      let fv = tp.spawn retref()
+      while not isReady(fv):
+        discard
+      check sync(fv)[] == "hello"
