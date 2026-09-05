@@ -50,8 +50,6 @@ export
   # flowvars
   Flowvar, isSpawned, isReady, isolation
 
-const sharedHeap = defined(gcArc) or defined(gcOrc) or defined(gcAtomicArc)
-
 type
   WorkerID = int32
 
@@ -569,8 +567,20 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
 
   if hasFuture:
     # Reserve env[0] for the return value, default-initialized until the task runs.
-    envTup.add quote do:
-      default(typeof `retType`)
+    when sharedHeap:
+      envTup.add quote do:
+        isolate(default(typeof `retType`))
+    else:
+      envTup.add quote do:
+        default(typeof `retType`)
+      let hasClosure = newLit(retType.kind == nnkSym and hasClosure(retType))
+      result.add quote do:
+        when `hasClosure` or not supportsThreadMove(typeof(`retType`)):
+          {.
+            error:
+              "Garbage-collected types (seq, string, ref, closures) cannot be used as task return: " &
+              $(typeof(`retType`))
+          .}
 
   # Continue with the runtime parameters:
   var j = argBase
@@ -594,21 +604,20 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
       else:
         # `move` to support move-only types in refc
         envTup.add p
-        let hasClosure = newLit(p.kind == nnkSym and hasClosure(p))
-
+        fwdCall.add quote do:
+          move(`env`[][`jl`])
         # `refc` uses a thread-local heap - therefore, anything heap-allocated
         # cannot traverse thread boundaries, even if it's isolated - since
         # tasks are likely to end up on a different thread, block their
         # construction here.
-        fwdCall.add quote do:
+        let hasClosure = newLit(p.kind == nnkSym and hasClosure(p))
+        result.add quote do:
           when `hasClosure` or not supportsThreadMove(typeof(`p`)):
             {.
               error:
                 "Garbage-collected types (seq, string, ref, closures) cannot be used as task arguments: " &
                 $(typeof(`p`))
             .}
-
-          move(`env`[][`jl`])
   let
     envp = genSym(nskParam, "envp")
       # closure environment, untyped pointer version in `fwdCall`
@@ -622,9 +631,14 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
 
   let body =
     if hasFuture:
-      quote do:
-        let `env` = cast[ptr `envTy`](`envp`)
-        `env`[][0] = `fwdCall`
+      when sharedHeap:
+        quote do:
+          let `env` = cast[ptr `envTy`](`envp`)
+          `env`[][0] = isolate(`fwdCall`)
+      else:
+        quote do:
+          let `env` = cast[ptr `envTy`](`envp`)
+          `env`[][0] = `fwdCall`
     elif envTup.len > 0:
       quote do:
         let `env` = cast[ptr `envTy`](`envp`)

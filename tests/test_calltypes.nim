@@ -24,7 +24,7 @@ proc argint(v: int) =
 proc retargint(v: int): int =
   v
 
-proc arggen*[T](v: T): int =
+proc arggen[T](v: T): int =
   5
 
 proc argtuple(v: (int, int)) =
@@ -32,6 +32,20 @@ proc argtuple(v: (int, int)) =
 
 proc argstr(s: string): int =
   s.len
+
+proc retstr(s: string): string =
+  s
+
+proc argseq(s: seq[int]): int =
+  s.len
+
+proc retseq(s: seq[int]): seq[int] =
+  s
+
+proc retref(): ref string =
+  var ret = new string
+  ret[] = "hello"
+  ret
 
 proc argumulti(b: bool, v: array[2, int], p: ptr int) =
   discard
@@ -81,6 +95,18 @@ suite "Call types":
     var v: MoveOnly
     tp.spawn(moveit(v))
 
+  when not supportsGcTypes:
+    test "string argument":
+      var s = "item"
+      check not compiles(tp.spawn(argstr(s)))
+
+    test "string return":
+      var s = "item"
+      check not compiles(tp.spawn(retstr(s)))
+
+    test "ref return":
+      check not compiles(tp.spawn(retref()))
+
   when supportsGcTypes:
     test "string argument":
       var futs: seq[Flowvar[int]]
@@ -93,3 +119,73 @@ suite "Call types":
       for i in 0 ..< 64:
         total += sync futs[i]
       check total == expected
+
+    test "string argument variant":
+      var s = "foo"
+      let fv = tp.spawn argstr(s)
+      # force run in another thread
+      while not isReady(fv):
+        discard
+      check sync(fv) == 3
+
+    test "string return":
+      var futs: seq[Flowvar[string]]
+      for i in 0 ..< 64:
+        let s = "item" & $i
+        futs.add tp.spawn(retstr(s))
+      for i in 0 ..< 64:
+        check sync(futs[i]) == "item" & $i
+
+    test "string return variant":
+      var s = "foo"
+      let fv = tp.spawn retstr(s)
+      while not isReady(fv):
+        discard
+      check sync(fv) == "foo"
+
+    test "seq argument":
+      var futs: seq[Flowvar[int]]
+      var expected = 0
+      for i in 0 ..< 64:
+        let s = @[i]
+        expected += s.len
+        futs.add tp.spawn(argseq(s))
+      var total = 0
+      for i in 0 ..< 64:
+        total += sync futs[i]
+      check total == expected
+
+    test "seq argument variant":
+      var s = @[1, 2, 3]
+      let fv = tp.spawn argseq(s)
+      while not isReady(fv):
+        discard
+      check sync(fv) == 3
+
+    test "seq return":
+      var futs: seq[Flowvar[seq[int]]]
+      for i in 0 ..< 64:
+        let s = @[i]
+        futs.add tp.spawn(retseq(s))
+      for i in 0 ..< 64:
+        check sync(futs[i]) == @[i]
+
+    test "seq return variant":
+      var s = @[1, 2, 3]
+      let fv = tp.spawn retseq(s)
+      while not isReady(fv):
+        discard
+      check sync(fv) == @[1, 2, 3]
+
+    test "ref return":
+      var futs: seq[Flowvar[ref string]]
+      for i in 0 ..< 64:
+        futs.add tp.spawn(retref())
+      for i in 0 ..< 64:
+        check sync(futs[i])[] == "hello"
+
+    test "ref return variant":
+      let fv = tp.spawn retref()
+      while not isReady(fv):
+        discard
+      check sync(fv)[] == "hello"
