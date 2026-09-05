@@ -36,6 +36,12 @@ proc argstr(s: string): int =
 proc retstr(s: string): string =
   s
 
+proc argseq(s: seq[int]): int =
+  s.len
+
+proc retseq(s: seq[int]): seq[int] =
+  s
+
 proc retref(): ref string =
   var ret = new string
   ret[] = "hello"
@@ -136,6 +142,40 @@ suite "Call types":
       while not isReady(fv):
         discard
       check sync(fv) == "foo"
+
+    test "seq argument":
+      var futs: seq[Flowvar[int]]
+      var expected = 0
+      for i in 0 ..< 64:
+        let s = @[i]
+        expected += s.len
+        futs.add tp.spawn(argseq(s))
+      var total = 0
+      for i in 0 ..< 64:
+        total += sync futs[i]
+      check total == expected
+
+    test "seq argument variant":
+      var s = @[1, 2, 3]
+      let fv = tp.spawn argseq(s)
+      while not isReady(fv):
+        discard
+      check sync(fv) == 3
+
+    test "seq return":
+      var futs: seq[Flowvar[seq[int]]]
+      for i in 0 ..< 64:
+        let s = @[i]
+        futs.add tp.spawn(retseq(s))
+      for i in 0 ..< 64:
+        check sync(futs[i]) == @[i]
+
+    test "seq return variant":
+      var s = @[1, 2, 3]
+      let fv = tp.spawn retseq(s)
+      while not isReady(fv):
+        discard
+      check sync(fv) == @[1, 2, 3]
 
     test "ref return":
       var futs: seq[Flowvar[ref string]]
