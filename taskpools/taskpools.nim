@@ -315,7 +315,7 @@ proc RootTask(env: pointer) =
 template isRootTask(task: TaskNode): bool {.used.} =
   task.callback == RootTask
 
-proc completeFuture[T](fv: Flowvar[T], parentResult: var T) =
+proc completeFuture[T](fv: var Flowvar[T], parentResult: var T) =
   ## Eagerly complete an awaited Flowvar
 
   template ctx: untyped = workerContext
@@ -381,11 +381,12 @@ proc completeFuture[T](fv: Flowvar[T], parentResult: var T) =
       fv.sleepUntilReady(ctx.id)
       debug: log("Worker %2d: sync 2.3.b - awaited task completed, waking\n", ctx.id)
 
-proc sync*[T](fv: sink Flowvar[T]): T {.inline, gcsafe.} =
+proc sync*[T](fv: sink Flowvar[T]): T {.inline.} =
   ## Blocks the current thread until the flowvar is available and returned.
   ## Worker threads help execute pending tasks while waiting, and park on the
   ## awaited task once they run out. Non-worker (external) threads have no task
-  ## to run, so they park immediately.
+  ## to run, so they park immediately. The flowvar may need to be explicitly moved with `move(fv)`.
+  doAssert isSpawned(fv)
   completeFuture(fv, result)
   cleanup(fv)
 
@@ -670,7 +671,7 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
   if hasFuture:
     # Must be done before the task node is scheduled.
     result.add quote do:
-      let `fut` = newFlowVar(type `retType`, `tn`)
+      var `fut` = newFlowVar(type `retType`, `tn`)
   
   result.add quote do:
     if workerContext.taskpool != `tp`:
@@ -680,7 +681,7 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
   
   if hasFuture:
     result.add quote do:
-      `fut`
+      move(`fut`)
 
   # Wrap in a block for namespacing
   result = nnkBlockStmt.newTree(newEmptyNode(), result)

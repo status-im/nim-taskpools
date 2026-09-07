@@ -81,7 +81,7 @@ proc nqueensPar(n, j: int, a: Board): int =
 
   for i in 0 ..< n:
     if localCounts[i].isSpawned():
-      result += sync(localCounts[i])
+      result += sync(move(localCounts[i]))
 
 suite "N-Queens":
   setup:

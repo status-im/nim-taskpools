@@ -62,4 +62,4 @@ suite "Fibonacci":
     for i in 0 ..< futs.len:
       futs[i] = tp.spawn fib(20)
     for i in 0 ..< futs.len:
-      check sync(futs[i]) == 6765
+      check sync(move(futs[i])) == 6765

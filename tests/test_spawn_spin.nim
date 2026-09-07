@@ -60,7 +60,7 @@ proc runSenderBatch() =
 
   # Only now, in the equivalent of the `finally`.
   for i in 0 ..< senderBatch:
-    doAssert sync(futs[i])
+    doAssert sync(move(futs[i]))
 
 proc allReady(futs: var array[pollBatch, Flowvar[int]]): bool =
   for i in 0 ..< pollBatch:
@@ -78,7 +78,7 @@ proc runPollBatch() =
     cpuRelax()
 
   for i in 0 ..< pollBatch:
-    doAssert sync(futs[i]) == i * 3 + 1
+    doAssert sync(move(futs[i])) == i * 3 + 1
 
 suite "Spawn then wait without re-entering the scheduler":
   test "send and poll":
