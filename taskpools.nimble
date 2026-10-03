@@ -99,6 +99,8 @@ task test_asan, "Run all tests with ASAN / TSAN":
       putEnv("UBSAN_OPTIONS", "print_stacktrace=1")
       # https://clang.llvm.org/docs/ThreadSanitizer.html
       for sanitizer in ["address", "thread"]:
+        if sanitizer == "thread" and defined(windows):
+          continue
         var sanArgs =
           " " & mm & " --cc:clang --debugger:native" &
           " --passC:-fsanitize=" & sanitizer & ",undefined" &
