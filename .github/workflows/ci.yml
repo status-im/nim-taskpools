@@ -11,10 +11,8 @@ jobs:
   build:
     uses: status-im/nimbus-common-workflow/.github/workflows/common.yml@main
     with:
-      nim-versions: '["version-2-0", "version-2-2", "version-2-4", "devel"]'
       test-command: |
-        nim -v
-        nimble list --installed --version
-        env NIMLANG=c nimble test
-        env NIMLANG=c nimble test_generic_futex
-        env NIMLANG=c nimble test_bench
+        nimble test_asan
+        nimble test
+        nimble test_generic_futex
+        nimble test_bench
