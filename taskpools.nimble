@@ -54,6 +54,16 @@ task test, "Run tests":
     runTests args & " --mm:refc"
     runTests args & " --mm:orc"
 
+  # Nim CI runs `nimble test` as part of its important packages,
+  # keep ASAN / TSAN here as well so that Nim regressions are caught
+  # https://github.com/nim-lang/Nim/blob/devel/testament/important_packages.nim
+  if (NimMajor, NimMinor) >= (2, 2) and defined(linux) and defined(amd64):
+    let sanArgs = " -d:danger --cc:clang --debugger:native"
+    runTests sanArgs & " --mm:arc -d:useMalloc --passC:-fsanitize=address --passL:-fsanitize=address"
+    runTests sanArgs & " --mm:orc -d:useMalloc --passC:-fsanitize=address --passL:-fsanitize=address"
+    runTests sanArgs & " --mm:orc -d:taskpoolsTsan -d:useMalloc --passC:-fsanitize=thread --passL:-fsanitize=thread"
+    runTests sanArgs & " --mm:refc -d:taskpoolsTsan --passC:-fsanitize=thread --passL:-fsanitize=thread"
+
 task test_generic_futex, "Run tests with generic futex":
   for args in testArguments:
     run args & " --mm:refc -d:taskpoolsGenericFutex", "tests/test_all.nim"
