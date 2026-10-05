@@ -18,10 +18,10 @@ when defined(osx):
   export PthreadBarrierAttr, PthreadBarrier, Errno, PTHREAD_BARRIER_SERIAL_THREAD
 else:
   type
-    PthreadBarrierAttr* {.importc: "pthread_barrierattr_t", header: "<sys/types.h>", byref.} = object
+    PthreadBarrierAttr* {.importc: "pthread_barrierattr_t", header: "<sys/types.h>", bycopy.} = object
       when (defined(linux) and not defined(android)) and defined(amd64):
         abi: array[4 div sizeof(cint), cint] # https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/x86/nptl/bits/pthreadtypes-arch.h;h=dd06d6753ebc80d94ede6c3c18227a3ad3104570;hb=HEAD#l45
-    PthreadBarrier* {.importc: "pthread_barrier_t", header: "<sys/types.h>", byref.} = object
+    PthreadBarrier* {.importc: "pthread_barrier_t", header: "<sys/types.h>", bycopy.} = object
       when (defined(linux) and not defined(android)) and defined(amd64):
         abi: array[32 div sizeof(clong), clong] # https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/x86/nptl/bits/pthreadtypes-arch.h;h=dd06d6753ebc80d94ede6c3c18227a3ad3104570;hb=HEAD#l28
 
@@ -39,7 +39,7 @@ else:
   #      one in barriers_macos
   #      see https://github.com/status-im/nim-taskpools/pull/20#discussion_r923843093
   proc pthread_barrier_init*(
-        barrier: PthreadBarrier,
+        barrier: var PthreadBarrier,
         attr: ptr PthreadBarrierAttr,
         count: cuint
       ): Errno {.header: "<pthread.h>".}
@@ -48,7 +48,7 @@ else:
 
   # TODO the macos signature is var instead of sink
   proc pthread_barrier_destroy*(
-        barrier: sink PthreadBarrier): Errno {.header: "<pthread.h>".}
+        barrier: var PthreadBarrier): Errno {.header: "<pthread.h>".}
     ## Destroy a previously dynamically initialized `barrier`.
 
   proc pthread_barrier_wait*(
