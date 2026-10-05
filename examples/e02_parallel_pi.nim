@@ -17,7 +17,7 @@ proc piApprox(tp: Taskpool, n: int): float =
   for k in 0 ..< pendingFuts.len:
     pendingFuts[k] = tp.spawn term(k) # Schedule a task on the threadpool a return a handle to retrieve the result.
   for k in 0 ..< pendingFuts.len:
-    result += sync pendingFuts[k]     # Block until the result is available.
+    result += sync move(pendingFuts[k])     # Block until the result is available.
 
 proc main() =
   var n = 1_000_000

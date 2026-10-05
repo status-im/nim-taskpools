@@ -130,7 +130,7 @@ proc nqueens_par(n, j: int32, a: CharArray): int32 {.gcsafe, raises: [].} =
 
   for i in 0 ..< n:
     if localCounts[i].isSpawned():
-      result += sync(localCounts[i])
+      result += sync(move(localCounts[i]))
 
 const solutions = [
   1,

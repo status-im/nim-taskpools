@@ -28,7 +28,7 @@ proc dfs(depth, breadth: int): uint32 {.gcsafe, raises: [].} =
     sums[i] = tp.spawn dfs(depth - 1, breadth)
 
   for i in 0 ..< breadth:
-    result += sync(sums[i])
+    result += sync(move(sums[i]))
 
 proc test(depth, breadth: int): uint32 =
   result = sync tp.spawn dfs(depth, breadth)

@@ -115,13 +115,14 @@ The following types and procedures are exposed:
       ## Returns true if the result of a Flowvar is ready.
       ## In that case `sync` will not block.
       ## Otherwise the current will block to help on all the pending tasks
-      ## until the Flowvar is ready.
+      ## until the Flowvar is ready. The Flowvar must have been spawned.
     ```
   - ```Nim
     proc sync*[T](fv: sink Flowvar[T]): T =
       ## Blocks the current thread until the flowvar is available
       ## and returned.
       ## The thread is not idle and will complete pending tasks.
+      ## The flowvar may need to be explicitly moved with `move(fv)`.
     ```
 
 ## Compile flags

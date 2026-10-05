@@ -37,8 +37,8 @@ proc submitterFv(ctx: Context) {.thread.} =
   var futs = newSeq[Flowvar[int]]()
   for i in 0 ..< ctx.numTasks:
     futs.add ctx.tp.spawn workInt()
-  for fut in futs:
-    doAssert sync(fut) == 123
+  for fut in mitems futs:
+    doAssert sync(move(fut)) == 123
     discard ctx.executed[].fetchAdd(1, moRelaxed)
 
 suite "External threads task queue":
