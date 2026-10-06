@@ -1,14 +1,14 @@
 mode = ScriptMode.Verbose
 
 packageName   = "taskpools"
-version       = "0.2.2"
+version       = "0.3.0"
 author        = "Status Research & Development GmbH"
 description   = "lightweight, energy-efficient, easily auditable threadpool"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim >= 2.0.14",
-         "unittest2 >= 0.2.0"
+requires "nim >= 2.2.14",
+         "unittest2 >= 0.3.0"
 
 let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
 let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
