@@ -9,7 +9,7 @@
 {.push raises: [].}
 
 import
-  std/[atomics, isolation],
+  std/[atomics, isolation, typetraits],
   ./primitives/[allocs, futexes]
 
 const sharedHeap* = defined(gcArc) or defined(gcOrc) or defined(gcAtomicArc)
@@ -143,7 +143,8 @@ proc sleepUntilComplete*(tn: TaskNode, waiterID: int32) {.inline.} =
 # ------------------------------------------------------------------------------
 
 proc new*(T: type TaskNode, parent: TaskNode, callback: TaskCallback, envSize: int): T =
-  var tn = tp_allocUnchecked(deref(T), sizeof(deref(T)) + envSize, zero = true)
+  var tn = tp_allocUnchecked(
+    pointerBase(T), sizeof(pointerBase(T)) + envSize, zero = true)
   tn.parent = parent
   tn.injectionNext = nil
   tn.callback = callback

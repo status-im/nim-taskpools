@@ -5,7 +5,9 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import system/ansi_c
+import
+  std/typetraits,
+  system/ansi_c
 
 # Helpers
 # ----------------------------------------------------------------------------------
@@ -39,10 +41,6 @@ func roundNextMultipleOf*(x: Natural, n: Natural): int {.inline.} =
 #
 # We use system malloc by default, the flag -d:useMalloc is not enough
 
-template deref*(T: typedesc): typedesc =
-  ## Return the base object type behind a ptr type
-  typeof(default(T)[])
-
 proc tp_alloc*(T: typedesc, zero: static bool = false): ptr T {.inline.}=
   ## Default allocator for the Taskpools library
   ## This allocates memory to hold the type T
@@ -62,9 +60,9 @@ proc tp_allocPtr*(T: typedesc[ptr], zero: static bool = false): T {.inline.}=
   ##
   ## Can use Nim allocator to measure the overhead of its lock
   ## Memory is zeroed if requested
-  result = tp_alloc(deref(T))
+  result = tp_alloc(pointerBase(T))
   when zero:
-    zeroMem(result, sizeof(deref(T)))
+    zeroMem(result, sizeof(pointerBase(T)))
 
 proc tp_alloc*(T: typedesc, len: SomeInteger): ptr UncheckedArray[T] {.inline.} =
   ## Default allocator for the Taskpools library.
