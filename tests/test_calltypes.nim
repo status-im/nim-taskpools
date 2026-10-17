@@ -61,6 +61,10 @@ proc argumulti(b: bool, v: array[2, int], p: ptr int) =
 
 let procvar: proc(v: int): int {.nimcall, gcsafe, raises: [].} = retargint
 
+var
+  mutableprocvar: proc(v: int): int {.nimcall, gcsafe, raises: [].} = retargint
+  threadprocvar {.threadvar.}: proc(v: int): int {.nimcall, gcsafe, raises: [].}
+
 type MoveOnly = object
 
 proc `=copy`(a: var MoveOnly, b: MoveOnly) {.error.}
@@ -113,6 +117,12 @@ suite "Call types":
 
   test "proc variable":
     check sync(tp.spawn(procvar(42))) == 42
+
+  test "mutable proc variable":
+    check not compiles(tp.spawn(mutableprocvar(42)))
+
+  test "threadvar proc variable":
+    check not compiles(tp.spawn(threadprocvar(42)))
 
   test "move-only argument":
     var v: MoveOnly

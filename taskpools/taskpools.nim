@@ -539,6 +539,9 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
 
   if hasClosure(fn):
     error("Closure calls cannot be spawned", fnCall)
+  if fn.symKind == nskVar:
+    # The callee is read on the worker thread when the task runs
+    error("Calls through proc 'var's cannot be spawned", fnCall)
 
   let
     envTup = nnkTupleConstr.newTree()
