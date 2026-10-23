@@ -1,6 +1,17 @@
 import std/atomics
 import ../taskpools
 
+when defined(windows):
+  import std/winlean
+
+  proc joinThreadByRef[T](t: var Thread[T]) =
+    discard waitForSingleObject(t.sys, -1'i32)
+else:
+  proc pthread_join[S](t: S, res: ptr pointer): cint {.importc, header: "<pthread.h>".}
+
+  proc joinThreadByRef[T](t: var Thread[T]) =
+    discard pthread_join(t.sys, nil)
+
 block:
   var counter: Atomic[int]
   counter.store(0, moRelaxed)
@@ -21,8 +32,8 @@ block:
     var threads = newSeq[Thread[void]](workers)
     for t in threads.mitems():
       createThread(t, worker)
-    for t in threads:
-      joinThread(t)
+    for t in mitems threads:
+      joinThreadByRef(t)
     tp.shutdown()
     let got = counter.load(moRelaxed)
     echo "Got: " & $got
