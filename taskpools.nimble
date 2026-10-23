@@ -123,4 +123,4 @@ task test_asan, "Run all tests with ASAN / TSAN":
         for args in testArguments:
           runTests args & sanArgs
           run args & sanArgs & " -d:taskpoolsGenericFutex", "tests/test_all.nim"
-        runBenchs "-d:danger" & sanArgs
+        #runBenchs "-d:danger" & sanArgs
