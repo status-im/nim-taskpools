@@ -23,7 +23,7 @@ block:
     var threads = newSeq[Thread[int]](workers)
     for t in threads.mitems():
       createThread(t, worker, 42)
-    for t in mitems threads:
+    for t in threads:
       joinThread(t)
     tp.shutdown()
     let got = counter.load(moRelaxed)
