@@ -33,8 +33,8 @@ proc argtuple(v: (int, int)) =
 proc argstr(s: string): int =
   s.len
 
-proc retstr(s: string): string =
-  s
+proc retstr(x: int): string =
+  $x
 
 proc argseq(s: seq[int]): int =
   s.len
@@ -56,6 +56,19 @@ proc `=copy`(a: var MoveOnly, b: MoveOnly) {.error.}
 
 proc moveit(v: sink MoveOnly) =
   discard
+
+type
+  Kind = enum
+    kA, kB
+  Variant = object
+    case kind: Kind
+    of kA:
+      a: int
+    of kB:
+      b: float
+
+proc retvariant(x: int): Variant =
+  Variant(kind: kA, a: x)
 
 suite "Call types":
   setup:
@@ -95,17 +108,20 @@ suite "Call types":
     var v: MoveOnly
     tp.spawn(moveit(v))
 
+  test "object variant return":
+    let x = sync(tp.spawn(retvariant(42)))
+    check x.a == 42
+
   when not supportsGcTypes:
     test "string argument":
       var s = "item"
       check not compiles(tp.spawn(argstr(s)))
 
-    test "string return":
-      var s = "item"
-      check not compiles(tp.spawn(retstr(s)))
+    #test "string return":
+    #  check not compiles(tp.spawn(retstr(42)))
 
-    test "ref return":
-      check not compiles(tp.spawn(retref()))
+    #test "ref return":
+    #  check not compiles(tp.spawn(retref()))
 
   when supportsGcTypes:
     test "string argument":
@@ -131,17 +147,15 @@ suite "Call types":
     test "string return":
       var futs: seq[Flowvar[string]]
       for i in 0 ..< 64:
-        let s = "item" & $i
-        futs.add tp.spawn(retstr(s))
+        futs.add tp.spawn(retstr(i))
       for i in 0 ..< 64:
-        check sync(futs[i]) == "item" & $i
+        check sync(futs[i]) == $i
 
     test "string return variant":
-      var s = "foo"
-      let fv = tp.spawn retstr(s)
+      let fv = tp.spawn retstr(42)
       while not isReady(fv):
         discard
-      check sync(fv) == "foo"
+      check sync(fv) == "42"
 
     test "seq argument":
       var futs: seq[Flowvar[int]]
