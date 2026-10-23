@@ -67,7 +67,9 @@ proc externalTask() {.gcsafe, raises: [].} =
   if n == numExtTasksTotal:
     lastExtDoneMs.store(int(wtime_msec() * 1000), moRelaxed)
 
-proc externalProducer() {.thread.} =
+# dummy int param to workaround:
+# https://github.com/nim-lang/Nim/issues/26354
+proc externalProducer(_: int) {.thread.} =
   for _ in 0 ..< NumTasksPerExtThread:
     tp.spawn externalTask()
 
@@ -117,9 +119,9 @@ proc main() =
 
   # Launch external producers right after; they compete with the internal tree
   # for injection queue drain time.
-  var extThreads = newSeq[Thread[void]](NumExtThreads)
+  var extThreads = newSeq[Thread[int]](NumExtThreads)
   for t in extThreads.mitems():
-    createThread(t, externalProducer)
+    createThread(t, externalProducer, 42)
   for t in extThreads:
     joinThread(t)
 
