@@ -1,6 +1,7 @@
 import std/atomics
 import ../taskpools
 
+# https://github.com/nim-lang/Nim/issues/26354
 when defined(windows):
   import std/winlean
 
