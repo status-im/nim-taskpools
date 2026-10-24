@@ -575,7 +575,8 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
         default(typeof `retType`)
       let hasClosure = newLit(retType.kind == nnkSym and hasClosure(retType))
       result.add quote do:
-        when `hasClosure` or not supportsThreadMove(typeof(`retType`)):
+        # https://github.com/status-im/nim-taskpools/pull/75
+        when `hasClosure`:  # or not supportsThreadMove(typeof(`retType`)):
           {.
             error:
               "Garbage-collected types (seq, string, ref, closures) cannot be used as task return: " &
