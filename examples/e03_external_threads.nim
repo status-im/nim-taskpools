@@ -10,7 +10,9 @@ block:
   proc increment() {.gcsafe, raises: [].} =
     discard counter.fetchAdd(1, moRelaxed)
 
-  proc worker() {.thread.} =
+  # dummy int param to workaround:
+  # https://github.com/nim-lang/Nim/issues/26354
+  proc worker(_: int) {.thread.} =
     for _ in 0 ..< 1000:
       tp.spawn(increment())
 
@@ -18,9 +20,9 @@ block:
     echo "\nThread worker count"
 
     let workers = 16
-    var threads = newSeq[Thread[void]](workers)
+    var threads = newSeq[Thread[int]](workers)
     for t in threads.mitems():
-      createThread(t, worker)
+      createThread(t, worker, 42)
     for t in threads:
       joinThread(t)
     tp.shutdown()
