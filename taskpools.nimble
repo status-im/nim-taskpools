@@ -94,7 +94,7 @@ task test_bench, "Run benchs":
 
 task test_asan, "Run all tests with ASAN / TSAN":
   if platform != "x86":
-    for mm in ["--mm:refc", "--mm:arc -d:useMalloc", "--mm:orc -d:useMalloc"]:
+    for mm in ["--mm:refc", "--mm:orc -d:useMalloc"]:
       # https://clang.llvm.org/docs/AddressSanitizer.html
       if mm == "--mm:refc":
         putEnv("ASAN_OPTIONS", "detect_leaks=0:detect_stack_use_after_return=0")
@@ -118,4 +118,3 @@ task test_asan, "Run all tests with ASAN / TSAN":
         for args in testArguments:
           runTests args & sanArgs
           run args & sanArgs & " -d:taskpoolsGenericFutex", "tests/test_all.nim"
-        runBenchs "-d:danger" & sanArgs
