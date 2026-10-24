@@ -21,11 +21,20 @@ proc retint(): int =
 proc argint(v: int) =
   doAssert v == 42
 
+proc argvoid(v: int): void =
+  doAssert v == 42
+
 proc retargint(v: int): int =
+  v
+
+proc retauto(v: int): auto =
   v
 
 proc arggen[T](v: T): int =
   5
+
+proc retgen[T](v: T): T =
+  v
 
 proc argtuple(v: (int, int)) =
   discard
@@ -49,6 +58,12 @@ proc retref(): ref string =
 
 proc argumulti(b: bool, v: array[2, int], p: ptr int) =
   discard
+
+let procvar: proc(v: int): int {.nimcall, gcsafe, raises: [].} = retargint
+
+var
+  mutableprocvar: proc(v: int): int {.nimcall, gcsafe, raises: [].} = retargint
+  threadprocvar {.threadvar.}: proc(v: int): int {.nimcall, gcsafe, raises: [].}
 
 type MoveOnly = object
 
@@ -87,11 +102,20 @@ suite "Call types":
   test "argument, no result":
     tp.spawn(argint(42))
 
+  test "argument, void result":
+    tp.spawn(argvoid(42))
+
   test "argument and result":
     check sync(tp.spawn(retargint(42))) == 42
 
+  test "argument and auto result":
+    check sync(tp.spawn(retauto(42))) == 42
+
   test "generic argument":
     check sync(tp.spawn(arggen(42))) == 5
+
+  test "generic result":
+    check sync(tp.spawn(retgen(42))) == 42
 
   test "const argument":
     const x = 42
@@ -103,6 +127,15 @@ suite "Call types":
   test "multiple arguments":
     var varray: array[2, int]
     tp.spawn(argumulti(false, varray, nil))
+
+  test "proc variable":
+    check sync(tp.spawn(procvar(42))) == 42
+
+  test "mutable proc variable":
+    check not compiles(tp.spawn(mutableprocvar(42)))
+
+  test "threadvar proc variable":
+    check not compiles(tp.spawn(threadprocvar(42)))
 
   test "move-only argument":
     var v: MoveOnly
