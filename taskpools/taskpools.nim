@@ -1,5 +1,5 @@
 # taskpools
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
@@ -539,6 +539,9 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
 
   if hasClosure(fn):
     error("Closure calls cannot be spawned", fnCall)
+  if fn.symKind == nskVar:
+    # The callee is read on the worker thread when the task runs
+    error("Calls through proc 'var's cannot be spawned", fnCall)
 
   let
     envTup = nnkTupleConstr.newTree()
@@ -561,8 +564,8 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
   # The result goes first so an awaiting Flowvar can read it via
   # `tryComplete` without knowing the argument layout.
   let
-    retType = fn.getImpl().params()[0]
-    hasFuture = retType.kind != nnkEmpty
+    retType = fnCall.getTypeInst()
+    hasFuture = retType.typeKind != ntyVoid
     argBase = if hasFuture: 1 else: 0
 
   if hasFuture:
