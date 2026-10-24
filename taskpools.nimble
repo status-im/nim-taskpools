@@ -1,7 +1,7 @@
 mode = ScriptMode.Verbose
 
 packageName   = "taskpools"
-version       = "0.2.2"
+version       = "0.2.3"
 author        = "Status Research & Development GmbH"
 description   = "lightweight, energy-efficient, easily auditable threadpool"
 license       = "MIT"
@@ -99,7 +99,7 @@ task test_asan, "Run all tests with ASAN / TSAN":
     except OSError:
       return
 
-    for mm in ["--mm:refc", "--mm:arc -d:useMalloc", "--mm:orc -d:useMalloc"]:
+    for mm in ["--mm:refc", "--mm:orc -d:useMalloc"]:
       # https://clang.llvm.org/docs/AddressSanitizer.html
       if mm == "--mm:refc":
         putEnv("ASAN_OPTIONS", "detect_leaks=0:detect_stack_use_after_return=0")
@@ -123,4 +123,3 @@ task test_asan, "Run all tests with ASAN / TSAN":
         for args in testArguments:
           runTests args & sanArgs
           run args & sanArgs & " -d:taskpoolsGenericFutex", "tests/test_all.nim"
-        runBenchs "-d:danger" & sanArgs

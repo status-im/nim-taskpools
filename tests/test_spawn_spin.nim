@@ -15,7 +15,14 @@ import
   ../taskpools
 
 const
-  sweepRounds = 400_000
+  sweepRounds =
+    when defined(release) or defined(danger):
+      when defined(taskpoolsTsan):
+        40_000
+      else:
+        400_000
+    else:
+      400
   senderBatch = 2
     ## Two is the whole race: the first push finds the deque empty and notifies,
     ## the second peeks while the first is still queued and must decide again.

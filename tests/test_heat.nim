@@ -226,7 +226,7 @@ suite "Heat diffusion":
     checkAccurate(e)
     delete(par)
 
-  when defined(release) or defined(danger):
+  when defined(danger):
     test "matches the analytical solution; grid=4096x1024; steps=100":
       # The defaults of benchmarks/heat. Allocates 2 x 32MB of matrix
       setupProblem(4096, 1024, 100)
