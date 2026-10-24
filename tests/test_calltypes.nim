@@ -59,6 +59,9 @@ proc retref(): ref string =
 proc argumulti(b: bool, v: array[2, int], p: ptr int) =
   discard
 
+proc argproc(f: proc(v: int): int {.nimcall, gcsafe, raises: [].}): int =
+  f(42)
+
 let procvar: proc(v: int): int {.nimcall, gcsafe, raises: [].} = retargint
 
 var
@@ -72,18 +75,25 @@ proc `=copy`(a: var MoveOnly, b: MoveOnly) {.error.}
 proc moveit(v: sink MoveOnly) =
   discard
 
-type
-  Kind = enum
-    kA, kB
-  Variant = object
-    case kind: Kind
-    of kA:
-      a: int
-    of kB:
-      b: float
+type CaseObject[T] = object
+  case kind: bool
+  of false:
+    discard
+  of true:
+    case nested: bool
+    of false:
+      p: ptr T
+    of true:
+      value: T
 
-proc retvariant(x: int): Variant =
-  Variant(kind: kA, a: x)
+func argcase(v: CaseObject[int]): int =
+  v.value
+
+func retcase(v: int): CaseObject[int] =
+  CaseObject[int](kind: true, nested: true, value: v)
+
+func argcasestr(v: CaseObject[string]): int =
+  v.value.len
 
 suite "Call types":
   setup:
@@ -128,6 +138,9 @@ suite "Call types":
     var varray: array[2, int]
     tp.spawn(argumulti(false, varray, nil))
 
+  test "proc argument":
+    check sync(tp.spawn(argproc(retargint))) == 42
+
   test "proc variable":
     check sync(tp.spawn(procvar(42))) == 42
 
@@ -141,9 +154,12 @@ suite "Call types":
     var v: MoveOnly
     tp.spawn(moveit(v))
 
-  test "object variant return":
-    let x = sync(tp.spawn(retvariant(42)))
-    check x.a == 42
+  test "case object argument":
+    var v = CaseObject[int](kind: true, nested: true, value: 42)
+    check sync(tp.spawn(argcase(v))) == 42
+
+  test "case object return":
+    check sync(tp.spawn(retcase(42))).value == 42
 
   when not supportsGcTypes:
     test "string argument":
@@ -155,6 +171,10 @@ suite "Call types":
 
     #test "ref return":
     #  check not compiles(tp.spawn(retref()))
+
+    test "case object string argument":
+      var v = CaseObject[string](kind: true, nested: true, value: "item")
+      check not compiles(tp.spawn(argcasestr(v)))
 
   when supportsGcTypes:
     test "string argument":
@@ -236,3 +256,7 @@ suite "Call types":
       while not isReady(fv):
         discard
       check sync(fv)[] == "hello"
+
+    test "case object string argument":
+      var v = CaseObject[string](kind: true, nested: true, value: "item")
+      check sync(tp.spawn(argcasestr(v))) == 4
