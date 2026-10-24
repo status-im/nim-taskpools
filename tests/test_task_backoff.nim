@@ -173,8 +173,7 @@ proc handoffAwaiter(rounds: int) {.thread.} =
   for _ in 0 ..< rounds:
     while not handoffFilled.load(moAcquire):
       cpuRelax()
-    let fv = handoff
-    doAssert sync(fv) == 1
+    doAssert sync(move(handoff)) == 1
     handoffFilled.store(false, moRelease)
 
 # Reverse-order await
@@ -230,9 +229,9 @@ suite "Per-task backoff stress":
         futs[i] = tp.spawn counted((i * 7) mod 96)
       var total = 0
       for i in countup(1, n - 1, 2):
-        total += sync(futs[i])
+        total += sync(move(futs[i]))
       for i in countup(0, n - 1, 2):
-        total += sync(futs[i])
+        total += sync(move(futs[i]))
       check total == n
 
   test "a future awaited by a thread other than its creator; 5000 rounds":

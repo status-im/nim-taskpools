@@ -153,20 +153,19 @@ proc new*(T: type TaskNode, parent: TaskNode, callback: TaskCallback, envSize: i
 
 proc free*(tn: var TaskNode) {.inline.} =
   ## Release a task node. The caller must own it, see "Task state".
-  if not tn.isNil:
-    tn.teardownSynchroState()
-    tp_free(tn)
-    tn = nil
+  doAssert not tn.isNil
+  tn.teardownSynchroState()
+  tp_free(tn)
+  tn = nil
 
 # Flowvars
 # ------------------------------------------------------------------------------
 
-# proc `=copy`*[T](dst: var Flowvar[T], src: Flowvar[T]) {.error: "Futures/Flowvars cannot be copied".}
-#
-# Unfortunately we cannot prevent this easily as internally
-# we need a copy:
-# - taskpools level when returning the flowvar from the spawn macro
-# - when storing flowvars in collections (seq/array)
+proc `=copy`*[T](dst: var Flowvar[T], src: Flowvar[T]) {.error: "Futures/Flowvars cannot be copied".}
+
+when (NimMajor, NimMinor) >= (2, 2):
+  proc `=wasMoved`*[T](obj: var Flowvar[T]) {.inline.} =
+    obj.tn = nil
 
 proc newFlowVar*(T: typedesc, tn: TaskNode): Flowvar[T] {.inline.} =
   ## Create a Flowvar referencing `tn`. Must be called before the task node is
@@ -174,29 +173,24 @@ proc newFlowVar*(T: typedesc, tn: TaskNode): Flowvar[T] {.inline.} =
   result.tn = tn
   tn.hasFuture = true
 
-proc cleanup*(fv: var Flowvar) {.inline.} =
-  if not fv.tn.isNil:
-    while not fv.tn.isGcReady():
-      cpuRelax()
-    fv.tn.free()
-    fv.tn = nil
-
 func isSpawned*(fv: Flowvar): bool {.inline.} =
   ## Returns true if a flowvar is spawned
   ## This may be useful for recursive algorithms that
   ## may or may not spawn a flowvar depending on a condition.
   ## This is similar to Option or Maybe types
-  return not fv.tn.isNil
+  not fv.tn.isNil
 
 func isReady*[T](fv: Flowvar[T]): bool {.inline.} =
   ## Returns true if the result of a Flowvar is ready.
   ## In that case `sync` will not block.
   ## Otherwise the current will block to help on all the pending tasks
-  ## until the Flowvar is ready.
+  ## until the Flowvar is ready. The Flowvar must have been spawned.
+  doAssert isSpawned(fv)
   fv.tn.isCompleted()
 
 proc tryComplete*[T](fv: Flowvar[T], parentResult: var T): bool {.inline.} =
   ## If the task is complete, move its result into `parentResult` and return true.
+  doAssert isSpawned(fv)
   if fv.tn.isCompleted():
     when sharedHeap:
       parentResult = extract(cast[ptr Isolated[T]](fv.tn.env.addr)[])
@@ -210,6 +204,14 @@ proc sleepUntilReady*(fv: Flowvar, waiterID: int32) {.inline.} =
   ## Park the current thread until the task backing the flowvar completes.
   ## Only park when there is no other work to do: the thread is only woken
   ## by the completion of that very task.
+  doAssert isSpawned(fv)
   fv.tn.sleepUntilComplete(waiterID)
+
+proc cleanup*(fv: var Flowvar) {.inline.} =
+  doAssert isSpawned(fv)
+  while not fv.tn.isGcReady():
+    cpuRelax()
+  fv.tn.free()
+  fv.tn = nil
 
 {.pop.} # raises: []

@@ -29,7 +29,7 @@ proc dfs(depth, breadth: int): uint32 =
   for i in 0 ..< breadth:
     sums[i] = tp.spawn dfs(depth - 1, breadth)
   for i in 0 ..< breadth:
-    result += sync(sums[i])
+    result += sync(move(sums[i]))
 
 suite "Depth First Search":
   setup:

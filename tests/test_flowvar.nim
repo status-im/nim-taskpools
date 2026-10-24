@@ -83,3 +83,29 @@ suite "Flowvar":
       discard
     check fv.isReady
     check sync(fv) == 1234
+
+  test "isReady fails on non-spawned flowvar":
+    var fv: Flowvar[int]
+    expect AssertionDefect:
+      discard isReady(fv)
+
+  test "can only be sync'ed once":
+    var fv = tp.spawn retint()
+    check sync(fv) == 42
+    check not compiles(var x = sync(fv))
+
+  test "can only be sync'ed once variant":
+    var fv = tp.spawn retint()
+    check sync(move(fv)) == 42
+    expect AssertionDefect:
+      discard sync(move(fv))
+
+  test "can only be sync'ed once variant 2":
+    var x = newSeq[Flowvar[int]]()
+    x.add(tp.spawn retint())
+    try:
+      for i in [0, 0]:
+        check sync(move(x[i])) == 42
+      check false
+    except AssertionDefect:
+      discard
