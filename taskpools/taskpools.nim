@@ -38,7 +38,8 @@
 {.push raises: [], gcsafe.} # Ensure no exceptions can happen
 
 import
-  std/[atomics, cpuinfo, isolation, macros, random, typetraits],
+  std/[atomics, cpuinfo, isolation, macros, random],
+  stew/shims/typetraits,
   ./[
     ast_utils, backoff, chase_lev_deques, flowvars,
     injection_queues, sparsesets,
@@ -93,25 +94,6 @@ type
     injectionQueue {.align: 64.}: InjectionQueue[TaskNode]
       ## Lock-free MPMC queue for tasks submitted by threads that are not
       ## currently running the scheduler (external threads or foreign pools).
-
-when not sharedHeap:
-  proc supportsThreadMove*(T: type): bool {.compileTime.} =
-    # Similar to `supportsCopyMem` but allows types with disabled `=copy`. Not
-    # perfect - in particular, doesn't allow `proc (...) {.nimcall.}`
-    when T is object | tuple:
-      for f in fields(cast[ptr T](0)[]):
-        if not supportsThreadMove(typeof(f)):
-          return false
-      true
-    elif T is distinct:
-      supportsThreadMove(distinctBase(T))
-    elif T is array:
-      supportsThreadMove(elementType(cast[ptr T](0)[]))
-    elif T is
-        SomeOrdinal | pointer | ptr | cstring | char | float | float32 | float64 | set:
-      true
-    else: # string | seq | ref | proc | iterator - last two are tricky
-      false
 
 # Thread-local config
 # ---------------------------------------------
@@ -576,10 +558,8 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
     else:
       envTup.add quote do:
         default(typeof `retType`)
-      let hasClosure = newLit(retType.kind == nnkSym and hasClosure(retType))
       result.add quote do:
-        # https://github.com/status-im/nim-taskpools/pull/75
-        when `hasClosure`:  # or not supportsThreadMove(typeof(`retType`)):
+        when not supportsSharedMem(typeof(`retType`)):
           {.
             error:
               "Garbage-collected types (seq, string, ref, closures) cannot be used as task return: " &
@@ -614,9 +594,8 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
         # cannot traverse thread boundaries, even if it's isolated - since
         # tasks are likely to end up on a different thread, block their
         # construction here.
-        let hasClosure = newLit(p.kind == nnkSym and hasClosure(p))
         result.add quote do:
-          when `hasClosure` or not supportsThreadMove(typeof(`p`)):
+          when not supportsSharedMem(typeof(`p`)):
             {.
               error:
                 "Garbage-collected types (seq, string, ref, closures) cannot be used as task arguments: " &
@@ -675,13 +654,13 @@ macro spawn*(tp: Taskpool, fnCall: typed): untyped =
     # Must be done before the task node is scheduled.
     result.add quote do:
       let `fut` = newFlowVar(type `retType`, `tn`)
-  
+
   result.add quote do:
     if workerContext.taskpool != `tp`:
       submitTask(`tp`, `tn`)
     else:
       schedule(workerContext, `tn`)
-  
+
   if hasFuture:
     result.add quote do:
       `fut`
