@@ -8,6 +8,7 @@ license       = "MIT"
 skipDirs      = @["tests"]
 
 requires "nim >= 2.2.14",
+         "stew >= 0.6.4",
          "unittest2 >= 0.3.0"
 
 let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
